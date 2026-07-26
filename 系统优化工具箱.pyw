@@ -1337,6 +1337,313 @@ POWER_OPTS = [
 ]
 
 
+def _svc_set(name, start="auto"):
+    return f'sc config {name} start= {start}'
+
+def _task_disable(tn):
+    return f'schtasks /Change /TN "{tn}" /Disable'
+
+def _task_enable(tn):
+    return f'schtasks /Change /TN "{tn}" /Enable'
+
+def _total_ram_kb():
+    try:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        class _MS(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+        ms = _MS()
+        ms.dwLength = ctypes.sizeof(ms)
+        k32.GlobalMemoryStatusEx(ctypes.byref(ms))
+        return int(ms.ullTotalPhys // 1024)
+    except Exception:
+        return 8 * 1024 * 1024
+
+
+# optimizerDuck 的全功能优化（去重后剩余独有项，对应 PowerManagement / Performance /
+# UserExperience / SecurityAndPrivacy 类别中工具箱此前未覆盖的开关）。
+# 每项含 apply / revert 命令列表，可被 open_optduck 面板统一执行（reg / sc / schtasks / powercfg）。
+_OPTDUCK_TELEMETRY_TASKS = [
+    r"\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+    r"\Microsoft\Windows\Application Experience\ProgramDataUpdater",
+    r"\Microsoft\Windows\Application Experience\MareBackup",
+    r"\Microsoft\Windows\Application Experience\StartupAppTask",
+    r"\Microsoft\Windows\Application Experience\PcaPatchDbTask",
+    r"\Microsoft\Windows\Autochk\Proxy",
+    r"\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+    r"\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
+    r"\Microsoft\Windows\Feedback\Siuf\DmClient",
+    r"\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload",
+]
+
+OPTDUCK_OPTS = [
+    # ---- Performance ----
+    {"id": "bg_apps", "name": "禁用后台应用", "risk": "低",
+     "desc": "关闭后台应用权限与搜索后台全局开关，省内存。",
+     "apply": [
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\BackgroundAccessApplications", "GlobalUserDisabled", 1),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search", "BackgroundAppGlobalToggle", 0),
+     ],
+     "revert": [
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\BackgroundAccessApplications", "GlobalUserDisabled"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Search", "BackgroundAppGlobalToggle"),
+     ]},
+    {"id": "svc_split", "name": "服务宿主拆分阈值", "risk": "中",
+     "desc": "按本机物理内存设置 SvcHostSplitThresholdInKB，减少 svchost 合并。",
+     "apply": [
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control", "SvcHostSplitThresholdInKB", _total_ram_kb()),
+     ],
+     "revert": [
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control", "SvcHostSplitThresholdInKB"),
+     ]},
+    {"id": "proc_prio", "name": "前台进程优先", "risk": "低",
+     "desc": "Win32PrioritySeparation=38（短、可变、高前台提升），提升前台响应。",
+     "apply": [
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\PriorityControl", "Win32PrioritySeparation", 38),
+     ],
+     "revert": [
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\PriorityControl", "Win32PrioritySeparation", 2),
+     ]},
+    {"id": "mmcss", "name": "多媒体调度优化（游戏/低延迟）", "risk": "低",
+     "desc": "MMCSS：NoLazyMode/AlwaysOn、关闭网络节流、Games 任务高优先级。音频/游戏低延迟。",
+     "apply": [
+         _reg_add("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "NoLazyMode", 1),
+         _reg_add("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "AlwaysOn", 1),
+         _reg_add("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "NetworkThrottlingIndex", "0xffffffff"),
+         _reg_add("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "SystemResponsiveness", 10),
+         _reg_add_sz("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "Priority", "2"),
+         _reg_add_sz("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "Scheduling Category", "High"),
+         _reg_add_sz("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "SFIO Priority", "High"),
+         _reg_add("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "GPU Priority", 8),
+     ],
+     "revert": [
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "NoLazyMode"),
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "AlwaysOn"),
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "NetworkThrottlingIndex"),
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile", "SystemResponsiveness"),
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "Priority"),
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "Scheduling Category"),
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "SFIO Priority"),
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Multimedia\\SystemProfile\\Tasks\\Games", "GPU Priority"),
+     ]},
+    {"id": "kbd_latency", "name": "键盘延迟优化", "risk": "低",
+     "desc": "KeyboardDelay=0、KeyboardSpeed=31，加快按键重复。",
+     "apply": [
+         _reg_add_sz("HKCU", "Control Panel\\Keyboard", "KeyboardDelay", "0"),
+         _reg_add_sz("HKCU", "Control Panel\\Keyboard", "KeyboardSpeed", "31"),
+     ],
+     "revert": [
+         _reg_add_sz("HKCU", "Control Panel\\Keyboard", "KeyboardDelay", "1"),
+         _reg_add_sz("HKCU", "Control Panel\\Keyboard", "KeyboardSpeed", "31"),
+     ]},
+    # ---- UserExperience ----
+    {"id": "explorer_menu", "name": "加速资源管理器与菜单", "risk": "低",
+     "desc": "取消资源管理器启动延迟、菜单弹出延迟归零。",
+     "apply": [
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize", "StartupDelayInMSec", 0),
+         _reg_add_sz("HKCU", "Control Panel\\Desktop", "MenuShowDelay", "0"),
+     ],
+     "revert": [
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize", "StartupDelayInMSec"),
+         _reg_add_sz("HKCU", "Control Panel\\Desktop", "MenuShowDelay", "400"),
+     ]},
+    {"id": "visual_fx", "name": "关闭视觉特效", "risk": "低",
+     "desc": "关闭任务栏动画、列表阴影、透明效果、Aero Peek，提升性能。",
+     "apply": [
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "TaskbarAnimations", 0),
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "ListviewShadow", 0),
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "EnableTransparency", 0),
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\DWM", "EnableAeroPeek", 0),
+     ],
+     "revert": [
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "TaskbarAnimations"),
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", "ListviewShadow"),
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "EnableTransparency"),
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\DWM", "EnableAeroPeek"),
+     ]},
+    {"id": "start_web", "name": "禁用开始菜单网页搜索", "risk": "低",
+     "desc": "DisableSearchBoxSuggestions=1，开始菜单不再联网搜 Bing。",
+     "apply": [
+         _reg_add("HKCU", "Software\\Policies\\Microsoft\\Windows\\Explorer", "DisableSearchBoxSuggestions", 1),
+     ],
+     "revert": [
+         _reg_del("HKCU", "Software\\Policies\\Microsoft\\Windows\\Explorer", "DisableSearchBoxSuggestions"),
+     ]},
+    # ---- SecurityAndPrivacy ----
+    {"id": "telemetry", "name": "关闭遥测与诊断", "risk": "中",
+     "desc": "关闭核心遥测/反馈注册表，禁用 DiagTrack 等 5 项服务与 10 个诊断计划任务。",
+     "apply": [
+         _reg_add("HKLM", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection", "AllowTelemetry", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "AllowTelemetry", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "DoNotShowFeedbackNotifications", 1),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "AllowCommercialDataPipeline", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "AllowDeviceNameInTelemetry", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "MicrosoftEdgeDataOptIn", 0),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\Siuf\\Rules", "NumberOfSIUFInPeriod", 0),
+         _reg_add("HKCU", "Software\\Policies\\Microsoft\\Windows\\EdgeUI", "DisableMFUTracking", 1),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\AppCompat", "DisableInventory", 1),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\AppCompat", "AITEnable", 0),
+         _reg_add("HKCU", "SOFTWARE\\Policies\\Microsoft\\Assistance\\Client\\1.0", "NoExplicitFeedback", 1),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Assistance\\Client\\1.0", "NoActiveHelp", 1),
+         _svc_disable("DiagTrack"), _svc_disable("dmwappushservice"),
+         _svc_disable("DcpSvc"), _svc_disable("diagnosticshub.standardcollector.service"),
+         _svc_disable("DusmSvc"),
+     ] + [_task_disable(t) for t in _OPTDUCK_TELEMETRY_TASKS],
+     "revert": [
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection", "AllowTelemetry"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "AllowTelemetry"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "DoNotShowFeedbackNotifications"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "AllowCommercialDataPipeline"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "AllowDeviceNameInTelemetry"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection", "MicrosoftEdgeDataOptIn"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\Siuf\\Rules", "NumberOfSIUFInPeriod"),
+         _reg_del("HKCU", "Software\\Policies\\Microsoft\\Windows\\EdgeUI", "DisableMFUTracking"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\AppCompat", "DisableInventory"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\AppCompat", "AITEnable"),
+         _reg_del("HKCU", "SOFTWARE\\Policies\\Microsoft\\Assistance\\Client\\1.0", "NoExplicitFeedback"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Assistance\\Client\\1.0", "NoActiveHelp"),
+         _svc_set("DiagTrack", "delayed-auto"), _svc_set("dmwappushservice", "demand"),
+         _svc_set("DcpSvc", "demand"), _svc_set("diagnosticshub.standardcollector.service", "demand"),
+         _svc_set("DusmSvc", "auto"),
+     ] + [_task_enable(t) for t in _OPTDUCK_TELEMETRY_TASKS]},
+    {"id": "ads_suggest", "name": "关闭广告与建议", "risk": "低",
+     "desc": "关闭广告 ID、消费版功能、第三方建议、资讯兴趣等推送。",
+     "apply": [
+         _reg_add("HKLM", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo", "Enabled", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\AdvertisingInfo", "DisabledByGroupPolicy", 1),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy", "TailoredExperiencesWithDiagnosticDataEnabled", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "DisableTailoredExperiencesWithDiagnosticData", 1),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "DisableWindowsConsumerFeatures", 1),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "DisableSoftLanding", 1),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "DisableThirdPartySuggestions", 1),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Dsh", "AllowNewsAndInterests", 0),
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", "HideSCAMeetNow", 1),
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\UserProfileEngagement", "ScoobeSystemSettingEnabled", 0),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\InputPersonalization", "RestrictImplicitInkCollection", 1),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\InputPersonalization", "RestrictImplicitTextCollection", 1),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\InputPersonalization\\TrainedDataStore", "HarvestContacts", 0),
+         _reg_add("HKCU", "Control Panel\\International\\User Profile", "HttpAcceptLanguageOptOut", 1),
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\StorageSense\\Parameters\\StoragePolicy", "01", 0),
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\StorageSense\\Parameters\\StoragePolicy", "02", 0),
+     ],
+     "revert": [
+         _reg_del("HKLM", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo", "Enabled"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\AdvertisingInfo", "DisabledByGroupPolicy"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy", "TailoredExperiencesWithDiagnosticDataEnabled"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "DisableTailoredExperiencesWithDiagnosticData"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "DisableWindowsConsumerFeatures"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "DisableSoftLanding"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent", "DisableThirdPartySuggestions"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Dsh", "AllowNewsAndInterests"),
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer", "HideSCAMeetNow"),
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\UserProfileEngagement", "ScoobeSystemSettingEnabled"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\InputPersonalization", "RestrictImplicitInkCollection"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\InputPersonalization", "RestrictImplicitTextCollection"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\InputPersonalization\\TrainedDataStore", "HarvestContacts"),
+         _reg_del("HKCU", "Control Panel\\International\\User Profile", "HttpAcceptLanguageOptOut"),
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\StorageSense\\Parameters\\StoragePolicy", "01"),
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\StorageSense\\Parameters\\StoragePolicy", "02"),
+     ]},
+    {"id": "activity_hist", "name": "关闭活动历史记录", "risk": "低",
+     "desc": "禁止发布/上传活动历史与动态信息流。",
+     "apply": [
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\System", "PublishUserActivities", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\System", "EnableActivityFeed", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\System", "PublishUserActivitiesOnUserConsent", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\System", "UploadUserActivities", 0),
+     ],
+     "revert": [
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\System", "PublishUserActivities"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\System", "EnableActivityFeed"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\System", "PublishUserActivitiesOnUserConsent"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\System", "UploadUserActivities"),
+     ]},
+    {"id": "autologger", "name": "关闭 WMI AutoLogger", "risk": "中",
+     "desc": "将 10 个 WMI AutoLogger 会话 Start=0，减少后台日志采集。",
+     "apply": [
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\AppModel", "Start", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\Cellcore", "Start", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\CloudExperienceHostOobe", "Start", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\DataMarket", "Start", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\DiagLog", "Start", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\Diagtrack-Listener", "Start", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\LwtNetLog", "Start", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\SQMLogger", "Start", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\WdiContextLog", "Start", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\WiFiSession", "Start", 0),
+     ],
+     "revert": [
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\AppModel", "Start"),
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\Cellcore", "Start"),
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\CloudExperienceHostOobe", "Start"),
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\DataMarket", "Start"),
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\DiagLog", "Start"),
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\Diagtrack-Listener", "Start"),
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\LwtNetLog", "Start"),
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\SQMLogger", "Start"),
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\WdiContextLog", "Start"),
+         _reg_del("HKLM", "SYSTEM\\CurrentControlSet\\Control\\WMI\\Autologger\\WiFiSession", "Start"),
+     ]},
+    {"id": "cortana", "name": "禁用 Cortana 与网页搜索", "risk": "中",
+     "desc": "通过组策略关闭 Cortana、云搜索与网页搜索（不卸载应用本体）。",
+     "apply": [
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "AllowCortana", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "AllowCloudSearch", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "AllowCortanaAboveLock", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "AllowSearchToUseLocation", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "ConnectedSearchUseWeb", 0),
+         _reg_add("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "DisableWebSearch", 1),
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Search", "CortanaConsent", 0),
+         _reg_add("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Search", "CortanaConsent2", 0),
+     ],
+     "revert": [
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "AllowCortana"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "AllowCloudSearch"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "AllowCortanaAboveLock"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "AllowSearchToUseLocation"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "ConnectedSearchUseWeb"),
+         _reg_del("HKLM", "SOFTWARE\\Policies\\Microsoft\\Windows\\Windows Search", "DisableWebSearch"),
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Search", "CortanaConsent"),
+         _reg_del("HKCU", "Software\\Microsoft\\Windows\\CurrentVersion\\Search", "CortanaConsent2"),
+     ]},
+    {"id": "content_delivery", "name": "关闭内容分发管理器", "risk": "低",
+     "desc": "禁用 Windows Spotlight/建议类内容的后台推送。",
+     "apply": [
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "ContentDeliveryAllowed", 0),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SubscribedContent-338387Enabled", 0),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SubscribedContent-338388Enabled", 0),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SubscribedContent-338389Enabled", 0),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SubscribedContent-353698Enabled", 0),
+         _reg_add("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SystemPaneSuggestionsEnabled", 0),
+     ],
+     "revert": [
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "ContentDeliveryAllowed"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SubscribedContent-338387Enabled"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SubscribedContent-338388Enabled"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SubscribedContent-338389Enabled"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SubscribedContent-353698Enabled"),
+         _reg_del("HKCU", "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager", "SystemPaneSuggestionsEnabled"),
+     ]},
+    # ---- PowerManagement（休眠/快速启动 + 高性能计划）----
+    {"id": "hibernate", "name": "关闭休眠与快速启动", "risk": "中",
+     "desc": "powercfg /h off：释放 hiberfil.sys 空间并关闭快速启动（物理机推荐）。",
+     "apply": ["powercfg /h off"],
+     "revert": ["powercfg /h on"]},
+    {"id": "high_perf", "name": "切换高性能电源计划", "risk": "低",
+     "desc": "激活内置“高性能”电源计划（8c5e7fda-…）；还原切回“平衡”。",
+     "apply": ["powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"],
+     "revert": ["powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e"]},
+]
+
+
 # ----------------------------------------------------------------------------
 # 3. GUI
 # ----------------------------------------------------------------------------
@@ -1416,6 +1723,7 @@ class CleanerApp:
             ("🎮 GPU 优化", self.open_gpu),
             ("⚡ 电源/性能", self.open_power),
             ("🚀 启动项管理", self.open_startup),
+            ("🧩 optimizerDuck 全功能", self.open_optduck),
             ("🚀 Win10 优化", self.launch_win10_optimizer),
             ("🌐 360 联网助手", self.launch_net_assist),
         ], width=18)
@@ -2689,6 +2997,173 @@ class CleanerApp:
         self._startup_refresh()
         self._startup_status.set(f"{verb} {len(sel)} 项。返回码 {code}。")
         self._log(f"[启动项] {verb} {len(sel)} 项，返回码 {code}。")
+
+    # ---- optimizerDuck 全功能优化面板（去重后的剩余独有项）----
+    def open_optduck(self):
+        if getattr(self, "_optduck_win", None) is not None:
+            try:
+                self._optduck_win.deiconify(); self._optduck_win.lift(); return
+            except Exception:
+                self._optduck_win = None
+        win = tk.Toplevel(self.root)
+        self._optduck_win = win
+        win.title("optimizerDuck 全功能优化")
+        win.geometry("780x640")
+        win.transient(self.root)
+        _apply_app_icon(win)
+
+        def _on_close():
+            self._optduck_win = None
+            win.destroy()
+        win.protocol("WM_DELETE_WINDOW", _on_close)
+
+        ttk.Label(win, text="🧩 optimizerDuck 全功能优化", font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        ttk.Label(
+            win,
+            text="勾选要应用的项 → “应用所选”；恢复默认 → 勾选相同项 → “还原所选”。"
+                 "全部可逆。写 HKLM / 服务 / 计划任务 / 电源计划需管理员（将触发 UAC）。",
+            font=("Microsoft YaHei UI", 9), foreground="#555", wraplength=740, justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 6))
+
+        list_frame = ttk.LabelFrame(win, text="优化开关清单", padding=4)
+        list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
+
+        cols = ("check", "name", "desc", "status", "risk")
+        tree = ttk.Treeview(list_frame, columns=cols, show="headings")
+        tree.heading("check", text="")
+        tree.heading("name", text="开关")
+        tree.heading("desc", text="说明")
+        tree.heading("status", text="状态")
+        tree.heading("risk", text="风险")
+        tree.column("check", width=30, anchor="center", stretch=False)
+        tree.column("name", width=170, stretch=False)
+        tree.column("desc", width=330)
+        tree.column("status", width=70, anchor="center", stretch=False)
+        tree.column("risk", width=50, anchor="center", stretch=False)
+        tree.grid(row=0, column=0, sticky="nsew")
+        vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=vsb.set)
+        tree.tag_configure("checked", background="#e8f5e9")
+        tree.tag_configure("highrisk", foreground="#b00020")
+        tree.tag_configure("done", foreground="#1565c0")
+
+        self._optduck_tree = tree
+        self._optduck_vars = {}
+        for idx, opt in enumerate(OPTDUCK_OPTS):
+            iid = str(idx)
+            self._optduck_vars[iid] = tk.BooleanVar(value=False)
+            tags = ["highrisk"] if opt["risk"] == "高" else []
+            tree.insert("", "end", iid=iid,
+                        values=("☐", opt["name"], _elide(opt["desc"], 40), "未操作", opt["risk"]),
+                        tags=tuple(tags))
+        tree.bind("<Button-1>", self._on_optduck_click)
+
+        bar = ttk.Frame(win)
+        bar.pack(fill="x", padx=12, pady=(0, 4))
+        ttk.Button(bar, text="全选", command=lambda: self._optduck_set_all(True)).pack(side="left", padx=2)
+        ttk.Button(bar, text="全不选", command=lambda: self._optduck_set_all(False)).pack(side="left", padx=2)
+        ttk.Button(bar, text="应用所选", command=lambda: self._optduck_execute("apply")).pack(side="right", padx=2)
+        ttk.Button(bar, text="还原所选", command=lambda: self._optduck_execute("revert")).pack(side="right", padx=2)
+
+        self._optduck_status = tk.StringVar(value="提示：逐项勾选，再点“应用所选”或“还原所选”。")
+        ttk.Label(win, textvariable=self._optduck_status,
+                  font=("Microsoft YaHei UI", 9), foreground="#b00020",
+                  wraplength=740, justify="left").pack(anchor="w", padx=12, pady=(0, 10))
+
+    def _on_optduck_click(self, event):
+        tree = self._optduck_tree
+        if tree.identify("region", event.x, event.y) != "cell":
+            return
+        if tree.identify_column(event.x) != "#1":
+            return
+        iid = tree.identify_row(event.y)
+        if not iid:
+            return
+        self._optduck_vars[iid].set(not self._optduck_vars[iid].get())
+        self._optduck_redraw(iid)
+
+    def _optduck_redraw(self, iid):
+        tree = self._optduck_tree
+        checked = self._optduck_vars[iid].get()
+        vals = list(tree.item(iid, "values"))
+        vals[0] = "☑" if checked else "☐"
+        tags = []
+        if OPTDUCK_OPTS[int(iid)]["risk"] == "高":
+            tags.append("highrisk")
+        if checked:
+            tags.append("checked")
+        if vals[3] in ("已应用", "已还原"):
+            tags.append("done")
+        tree.item(iid, values=vals, tags=tuple(tags))
+
+    def _optduck_set_all(self, val):
+        for iid in self._optduck_vars:
+            self._optduck_vars[iid].set(val)
+            self._optduck_redraw(iid)
+
+    def _optduck_execute(self, mode):
+        if getattr(self, "_optduck_busy", False):
+            messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._optduck_win)
+            return
+        sel = [(iid, OPTDUCK_OPTS[int(iid)]) for iid in self._optduck_vars if self._optduck_vars[iid].get()]
+        if not sel:
+            messagebox.showwarning("提示", "请至少勾选一项。", parent=self._optduck_win)
+            return
+        verb = "应用" if mode == "apply" else "还原"
+        names = "、".join(o["name"] for _, o in sel)
+        risk = (f"即将{verb}以下 {len(sel)} 项 optimizerDuck 优化（注册表/服务/计划任务/电源）：\n\n{names}\n\n"
+                "全部可逆——之后勾选相同项点“还原所选”即可恢复。写 HKLM / 服务 / 计划任务需管理员，将触发 UAC。\n\n确认？")
+        if not messagebox.askyesno("确认" + verb, risk, parent=self._optduck_win):
+            self._log("[optimizerDuck] 已取消。")
+            return
+        cmds = []
+        for _, o in sel:
+            cmds.extend(o[mode])
+        full = " & ".join(cmds)
+        self._optduck_busy = True
+        self._optduck_status.set(f"{verb}中：{names}")
+        self._log(f"[optimizerDuck] {verb} {len(sel)} 项……")
+        if is_admin():
+            threading.Thread(target=self._optduck_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
+        else:
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
+            if ret > 32:
+                for iid, _ in sel:
+                    self._optduck_set_status(iid, "已" + verb)
+                self._optduck_busy = False
+                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._optduck_win)
+            else:
+                self._optduck_busy = False
+                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._optduck_win)
+
+    def _optduck_thread(self, full, mode, iids):
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[optimizerDuck] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._optduck_done, mode, iids, r.returncode)
+        except Exception as e:
+            self._log(f"[optimizerDuck] 执行异常：{e}")
+            self.root.after(0, self._optduck_done, mode, iids, -1)
+
+    def _optduck_done(self, mode, iids, code):
+        self._optduck_busy = False
+        verb = "已应用" if mode == "apply" else "已还原"
+        for iid in iids:
+            self._optduck_set_status(iid, verb)
+        self._optduck_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
+        self._log(f"[optimizerDuck] {verb} {len(iids)} 项，返回码 {code}。")
+
+    def _optduck_set_status(self, iid, text):
+        tree = self._optduck_tree
+        vals = list(tree.item(iid, "values"))
+        vals[3] = text
+        tree.item(iid, values=vals)
+        self._optduck_redraw(iid)
 
     # ---- 一键系统优化（需管理员，执行前二次确认）----
     def _run_admin_cmd(self, cmds, title, risk_note):

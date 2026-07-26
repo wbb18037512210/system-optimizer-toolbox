@@ -13,7 +13,8 @@ Windows 系统优化工具箱（tkinter GUI，单文件 `.pyw`），自带多分
 - **GPU 优化**：整合自开源 [optimizerDuck](https://github.com/itsfatduck/optimizerDuck)（GPL v3）的显卡深度调优。运行时读取注册表自动检测本机显卡厂商，仅显示 AMD / NVIDIA / Intel 适用的 8 项开关（禁用 ULPS、电源门控、时钟门控、ASPM、动态 / 异步 P-state、异步翻转、自适应垂直同步），写入 `HKLM\...\Control\Class\{4d36e968-...}\XXXX`，全部可逆（还原即删除覆写值恢复驱动默认）。
 - **电源 / 性能细项**：整合自 optimizerDuck 的两项独有调整——禁用系统电源节流（PowerThrottlingOff=1 + 关闭 USB 意外移除自动恢复）、禁用 USB 设备节能挂起（CIM `MSPower_DeviceEnable`），降低延迟、提升性能。
 - **启动项管理**：整合自 optimizerDuck 的启动项管理器。枚举本机开机自启项（注册表 Run 键 / 启动文件夹 / 计划任务），勾选后一键“禁用所选 / 启用所选”，通过 `StartupApproved` 注册表标志或计划任务状态切换，可逆。
-- **系统工具快捷入口**：控制面板、任务管理器、卸载程序、磁盘清理、系统信息、设备管理器、磁盘管理、服务、上帝模式、卸载预装应用、深度优化、GPU 优化、电源/性能、启动项管理、Win10 优化、360 联网助手。
+- **optimizerDuck 全功能优化**：整合自 optimizerDuck 其余独有优化类别（Performance / UserExperience / SecurityAndPrivacy / PowerManagement）的去重后 16 项开关面板，可勾选、一键“应用所选 / 还原所选”（全部可逆）。覆盖：禁用后台应用、SvcHost 拆分阈值（按本机内存）、前台进程优先、MMCSS 多媒体调度（游戏/低延迟）、键盘延迟优化、加速资源管理器与菜单、关闭视觉特效、禁用开始菜单网页搜索、关闭遥测与诊断（注册表 + 禁用 DiagTrack 等 5 项服务 + 10 个诊断计划任务）、关闭广告与建议、关闭活动历史、关闭 WMI AutoLogger、禁用 Cortana 与网页搜索、关闭内容分发管理器、关闭休眠与快速启动、切换高性能电源计划。
+- **系统工具快捷入口**：控制面板、任务管理器、卸载程序、磁盘清理、系统信息、设备管理器、磁盘管理、服务、上帝模式、卸载预装应用、深度优化、GPU 优化、电源/性能、启动项管理、optimizerDuck 全功能、Win10 优化、360 联网助手。
 - **运行日志面板**：底部实时显示操作结果。
 - **自定义应用图标**：窗口左上角、任务栏、Alt-Tab 均显示 `icon.ico`（多分辨率：16/24/32/48/64/128/256）。
 
