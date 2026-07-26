@@ -1716,6 +1716,10 @@ class GradButton(tk.Canvas):
         self._disabled = False
         self._draw()
 
+    def _set_text(self, t):
+        self._text = t
+        self._draw()
+
     def _hov(self, v):
         self._hover = v
         self._draw()
@@ -2072,6 +2076,10 @@ class CleanerApp:
         tk.Label(parent, text="一键优化", bg=BG, fg=TEXT, font=("Microsoft YaHei UI", 15, "bold")).place(x=26, y=20)
         tk.Label(parent, text="⚠ 每项二次确认，全部可逆；非管理员触发 UAC。", bg=BG, fg=DANGER,
                  font=("Microsoft YaHei UI", 9, "bold")).place(x=120, y=26)
+        # 加载状态指示：执行期间显示"正在执行…"，避免界面看起来像卡死
+        self.opt_status = tk.StringVar(value="")
+        tk.Label(parent, textvariable=self.opt_status, bg=BG, fg=ACCENT2,
+                 font=("Microsoft YaHei UI", 10, "bold")).place(x=26, y=44)
         row = col = 0
         x0, y0, cw, ch, gx, gy = 26, 64, 288, 96, 16, 16
         for icon, name, desc, meth in self.OPTS:
@@ -2079,13 +2087,40 @@ class CleanerApp:
             card.place(x=x0 + col * (cw + gx), y=y0 + row * (ch + gy))
             card.text(20, 16, f"{icon}  {name}", font=FONT_B, fill=TEXT)
             card.text(20, 46, desc, font=("Microsoft YaHei UI", 9), fill=SUB)
-            b = GradButton(card, text="执行", width=72, height=30, color=ACCENT,
-                           command=lambda m=meth: getattr(self, m)())
+            # 先创建按钮，再绑定回调；默认参数固定当前按钮，避免循环闭包串到最后一项
+            b = GradButton(card, text="执行", width=72, height=30, color=ACCENT, command=None)
+            b._cmd = lambda m=meth, btn=b: self._opt_execute(m, btn)
             card.widget(b, cw - 92, ch - 42)
             col += 1
             if col >= 3:
                 col = 0
                 row += 1
+
+    def _opt_execute(self, meth, btn):
+        """包装优化项执行：点击后立即给出加载状态（按钮灰态+“执行中…”），
+        命令在后台线程跑，UI 全程可响应；完成后由 _restore_opt_btn 恢复。"""
+        if getattr(self, "_busy", False):
+            return
+        btn.disable()
+        btn._set_text("执行中…")
+        self._opt_btn = btn
+        self.opt_status.set("⏳ 正在执行优化任务，界面可正常操作，请稍候…")
+        try:
+            getattr(self, meth)()
+        except Exception as e:
+            self._log(f"[优化] {meth} 调用异常：{e}")
+            self._restore_opt_btn()
+
+    def _restore_opt_btn(self):
+        btn = getattr(self, "_opt_btn", None)
+        if btn is not None:
+            try:
+                btn.enable()
+                btn._set_text("执行")
+            except Exception:
+                pass
+            self._opt_btn = None
+        self.opt_status.set("")
 
     # ---- 工具视图（可滚动卡片网格）----
     def _build_tools(self, parent):
@@ -3559,6 +3594,9 @@ class CleanerApp:
                 messagebox.showinfo(title, "已请求管理员权限执行（详见命令窗口/日志）。")
             else:
                 messagebox.showerror(title, "提权失败，请手动以管理员身份运行本工具。")
+            # 非管理员路径：命令在外部 cmd 窗口执行，本进程不阻塞，
+            # 提权窗口关闭后立即恢复按钮（本进程不再跟踪进度）。
+            self._restore_opt_btn()
             return ok
 
     def _exec_admin_thread(self, full, title):
@@ -3582,6 +3620,8 @@ class CleanerApp:
             messagebox.showinfo(title, "执行成功。")
         else:
             messagebox.showwarning(title, f"命令返回非零：{code}\n{out}")
+        # 后台线程执行完毕：恢复“执行”按钮与状态条（loading 指示结束）
+        self._restore_opt_btn()
 
     def opt_high_perf(self):
         self._run_admin_cmd(
