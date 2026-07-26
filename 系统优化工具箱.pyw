@@ -1260,6 +1260,82 @@ DEEP_OPTS = [
     },
 ]
 
+# ----------------------------------------------------------------------------
+# optimizerDuck 合并：GPU 优化（AMD/NVIDIA/Intel）+ 电源/性能细项
+# 数据移植自开源 optimizerDuck（GPL v3，itsfatduck）。
+# GPU 项路径依赖显卡注册表索引，运行时由 _gpu_detect() 动态注入，故这里只存
+# 「厂商 + 注册表值名 + 值」；电源/性能项为固定路径，直接生成命令。
+# ----------------------------------------------------------------------------
+import base64
+import json
+
+
+def _b64_ps(script: str) -> str:
+    """把 PowerShell 脚本编码为 -EncodedCommand，避免 cmd 解析其中的 | {} 等符号。"""
+    return "powershell -NoProfile -EncodedCommand " + base64.b64encode(
+        script.encode("utf-16-le")
+    ).decode()
+
+
+def _ps_usb_power(enable: bool) -> str:
+    """禁用/启用 USB ROOT 设备的节能挂起（MSPower_DeviceEnable.Enable）。"""
+    flag = "$true" if enable else "$false"
+    script = (
+        "Get-CimInstance -Namespace root\\wmi -ClassName MSPower_DeviceEnable "
+        "| Where-Object { $_.InstanceName -match 'USB\\\\ROOT' } "
+        "| ForEach-Object { Set-CimInstance -InputObject $_ -Property @{ Enable = " + flag + " } }"
+    )
+    return _b64_ps(script)
+
+
+# GPU 调优项：每项对应某厂商；apply 时对检测到的每个同厂商 GPU 索引路径写 reg，
+# revert 用 reg delete 删除这些覆写值（恢复驱动默认，即可逆）。
+GPU_OPTS = [
+    {"vendor": "AMD", "name": "禁用 ULPS（超低功耗状态）",
+     "desc": "AMD：关闭 ULPS，避免显卡闲置后唤醒卡顿/黑屏。", "risk": "低",
+     "regs": [("EnableULPS", 0)]},
+    {"vendor": "AMD", "name": "禁用电源门控 Power Gating",
+     "desc": "AMD：关闭电源门控与动态 P-state，提升持续性能（略增功耗）。", "risk": "中",
+     "regs": [("DisablePowerGating", 1), ("PP_GPUPowerDownEnabled", 0), ("DisableDynamicPstate", 1)]},
+    {"vendor": "AMD", "name": "禁用视频时钟门控",
+     "desc": "AMD：关闭 VCE/UVD 时钟门控，降低视频编解码延迟。", "risk": "中",
+     "regs": [("DisableVCEPowerGating", 1), ("DisableVceClockGating", 1),
+              ("EnableUvdClockGating", 0), ("EnableVceSwClockGating", 0)]},
+    {"vendor": "AMD", "name": "禁用 ASPM（L0s/L1）",
+     "desc": "AMD：关闭 PCIe ASPM 节能状态，降低延迟。", "risk": "低",
+     "regs": [("EnableAspmL0s", 0), ("EnableAspmL1", 0)]},
+    {"vendor": "NVIDIA", "name": "禁用动态 P-state",
+     "desc": "NVIDIA：关闭动态 P-state，保持高频。", "risk": "低",
+     "regs": [("DisableDynamicPstate", 1)]},
+    {"vendor": "NVIDIA", "name": "禁用异步 P-states",
+     "desc": "NVIDIA：关闭异步 P-state，降低调度延迟。", "risk": "中",
+     "regs": [("DisableASyncPstates", 1)]},
+    {"vendor": "Intel", "name": "禁用异步翻转 Async Flips",
+     "desc": "Intel 核显：关闭异步翻转，降低输入延迟。", "risk": "低",
+     "regs": [("Display1_DisableAsyncFlips", 1)]},
+    {"vendor": "Intel", "name": "禁用自适应垂直同步",
+     "desc": "Intel 核显：关闭自适应 Vsync。", "risk": "低",
+     "regs": [("AdaptiveVsyncEnable", 0)]},
+]
+
+# 电源/性能细项（固定路径，与现有深度优化面板不重复）。
+POWER_OPTS = [
+    {"id": "power_throttle", "name": "禁用系统电源节流",
+     "desc": "PowerThrottlingOff=1 + 关闭 USB 意外移除自动恢复，提升 CPU/设备性能。", "risk": "低",
+     "apply": [
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling", "PowerThrottlingOff", 1),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\USB\\AutomaticSurpriseRemoval", "AttemptRecoveryFromUsbPowerDrain", 0),
+     ],
+     "revert": [
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling", "PowerThrottlingOff", 0),
+         _reg_add("HKLM", "SYSTEM\\CurrentControlSet\\Control\\USB\\AutomaticSurpriseRemoval", "AttemptRecoveryFromUsbPowerDrain", 1),
+     ]},
+    {"id": "usb_power_save", "name": "禁用 USB 设备节能挂起",
+     "desc": "关闭 USB ROOT 设备节能（MSPower_DeviceEnable），降低 USB 外设延迟。重启生效。", "risk": "低",
+     "apply": [_ps_usb_power(False)],
+     "revert": [_ps_usb_power(True)]},
+]
+
 
 # ----------------------------------------------------------------------------
 # 3. GUI
@@ -1337,6 +1413,9 @@ class CleanerApp:
             ("👑 上帝模式", self.open_godmode),
             ("🧯 卸载预装应用", self.open_debloat),
             ("🛠 深度优化", self.open_deep),
+            ("🎮 GPU 优化", self.open_gpu),
+            ("⚡ 电源/性能", self.open_power),
+            ("🚀 启动项管理", self.open_startup),
             ("🚀 Win10 优化", self.launch_win10_optimizer),
             ("🌐 360 联网助手", self.launch_net_assist),
         ], width=18)
@@ -1961,6 +2040,655 @@ class CleanerApp:
         vals[3] = text
         tree.item(iid, values=vals)
         self._deep_redraw(iid)
+
+    # ---- 电源/性能细项面板（optimizerDuck，固定路径）----
+    def open_power(self):
+        if getattr(self, "_power_win", None) is not None:
+            try:
+                self._power_win.deiconify(); self._power_win.lift(); return
+            except Exception:
+                self._power_win = None
+        win = tk.Toplevel(self.root)
+        self._power_win = win
+        win.title("电源/性能细项（optimizerDuck）")
+        win.geometry("760x560")
+        win.transient(self.root)
+        _apply_app_icon(win)
+
+        def _on_close():
+            self._power_win = None
+            win.destroy()
+        win.protocol("WM_DELETE_WINDOW", _on_close)
+
+        ttk.Label(win, text="⚡ 电源/性能细项", font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        ttk.Label(
+            win,
+            text="勾选要应用的项 → “应用所选”；恢复默认 → 勾选相同项 → “还原所选”。"
+                 "全部可逆。写 HKLM 需管理员（将触发 UAC）。",
+            font=("Microsoft YaHei UI", 9), foreground="#555", wraplength=720, justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 6))
+
+        list_frame = ttk.LabelFrame(win, text="电源/性能开关", padding=4)
+        list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
+
+        cols = ("check", "name", "desc", "status", "risk")
+        tree = ttk.Treeview(list_frame, columns=cols, show="headings")
+        tree.heading("check", text="")
+        tree.heading("name", text="开关")
+        tree.heading("desc", text="说明")
+        tree.heading("status", text="状态")
+        tree.heading("risk", text="风险")
+        tree.column("check", width=30, anchor="center", stretch=False)
+        tree.column("name", width=170, stretch=False)
+        tree.column("desc", width=320)
+        tree.column("status", width=70, anchor="center", stretch=False)
+        tree.column("risk", width=50, anchor="center", stretch=False)
+        tree.grid(row=0, column=0, sticky="nsew")
+        vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=vsb.set)
+        tree.tag_configure("checked", background="#e8f5e9")
+        tree.tag_configure("highrisk", foreground="#b00020")
+        tree.tag_configure("done", foreground="#1565c0")
+
+        self._power_tree = tree
+        self._power_vars = {}
+        for idx, opt in enumerate(POWER_OPTS):
+            iid = str(idx)
+            self._power_vars[iid] = tk.BooleanVar(value=False)
+            tags = ["highrisk"] if opt["risk"] == "高" else []
+            tree.insert("", "end", iid=iid,
+                        values=("☐", opt["name"], _elide(opt["desc"], 36), "未操作", opt["risk"]),
+                        tags=tuple(tags))
+        tree.bind("<Button-1>", self._on_power_click)
+
+        bar = ttk.Frame(win)
+        bar.pack(fill="x", padx=12, pady=(0, 4))
+        ttk.Button(bar, text="全选", command=lambda: self._power_set_all(True)).pack(side="left", padx=2)
+        ttk.Button(bar, text="全不选", command=lambda: self._power_set_all(False)).pack(side="left", padx=2)
+        ttk.Button(bar, text="应用所选", command=lambda: self._power_execute("apply")).pack(side="right", padx=2)
+        ttk.Button(bar, text="还原所选", command=lambda: self._power_execute("revert")).pack(side="right", padx=2)
+
+        self._power_status = tk.StringVar(value="提示：逐项勾选，再点“应用所选”或“还原所选”。")
+        ttk.Label(win, textvariable=self._power_status,
+                  font=("Microsoft YaHei UI", 9), foreground="#b00020",
+                  wraplength=720, justify="left").pack(anchor="w", padx=12, pady=(0, 10))
+
+    def _on_power_click(self, event):
+        tree = self._power_tree
+        if tree.identify("region", event.x, event.y) != "cell":
+            return
+        if tree.identify_column(event.x) != "#1":
+            return
+        iid = tree.identify_row(event.y)
+        if not iid:
+            return
+        self._power_vars[iid].set(not self._power_vars[iid].get())
+        self._power_redraw(iid)
+
+    def _power_redraw(self, iid):
+        tree = self._power_tree
+        checked = self._power_vars[iid].get()
+        vals = list(tree.item(iid, "values"))
+        vals[0] = "☑" if checked else "☐"
+        tags = []
+        if POWER_OPTS[int(iid)]["risk"] == "高":
+            tags.append("highrisk")
+        if checked:
+            tags.append("checked")
+        if vals[3] in ("已应用", "已还原"):
+            tags.append("done")
+        tree.item(iid, values=vals, tags=tuple(tags))
+
+    def _power_set_all(self, val):
+        for iid in self._power_vars:
+            self._power_vars[iid].set(val)
+            self._power_redraw(iid)
+
+    def _power_execute(self, mode):
+        if getattr(self, "_power_busy", False):
+            messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._power_win)
+            return
+        sel = [(iid, POWER_OPTS[int(iid)]) for iid in self._power_vars if self._power_vars[iid].get()]
+        if not sel:
+            messagebox.showwarning("提示", "请至少勾选一项。", parent=self._power_win)
+            return
+        verb = "应用" if mode == "apply" else "还原"
+        names = "、".join(o["name"] for _, o in sel)
+        risk = (f"即将{verb}以下 {len(sel)} 项电源/性能调整：\n\n{names}\n\n"
+                "全部可逆——之后勾选相同项点“还原所选”即可恢复。写 HKLM 需管理员，将触发 UAC。\n\n确认？")
+        if not messagebox.askyesno("确认" + verb, risk, parent=self._power_win):
+            self._log("[电源/性能] 已取消。")
+            return
+        cmds = []
+        for _, o in sel:
+            cmds.extend(o[mode])
+        full = " & ".join(cmds)
+        self._power_busy = True
+        self._power_status.set(f"{verb}中：{names}")
+        self._log(f"[电源/性能] {verb} {len(sel)} 项……")
+        if is_admin():
+            threading.Thread(target=self._power_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
+        else:
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
+            if ret > 32:
+                for iid, _ in sel:
+                    self._power_set_status(iid, "已" + verb)
+                self._power_busy = False
+                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._power_win)
+            else:
+                self._power_busy = False
+                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._power_win)
+
+    def _power_thread(self, full, mode, iids):
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[电源/性能] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._power_done, mode, iids, r.returncode)
+        except Exception as e:
+            self._log(f"[电源/性能] 执行异常：{e}")
+            self.root.after(0, self._power_done, mode, iids, -1)
+
+    def _power_done(self, mode, iids, code):
+        self._power_busy = False
+        verb = "已应用" if mode == "apply" else "已还原"
+        for iid in iids:
+            self._power_set_status(iid, verb)
+        self._power_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
+        self._log(f"[电源/性能] {verb} {len(iids)} 项，返回码 {code}。")
+
+    def _power_set_status(self, iid, text):
+        tree = self._power_tree
+        vals = list(tree.item(iid, "values"))
+        vals[3] = text
+        tree.item(iid, values=vals)
+        self._power_redraw(iid)
+
+    # ---- GPU 优化面板（optimizerDuck，运行时检测厂商）----
+    def open_gpu(self):
+        if getattr(self, "_gpu_win", None) is not None:
+            try:
+                self._gpu_win.deiconify(); self._gpu_win.lift(); return
+            except Exception:
+                self._gpu_win = None
+        win = tk.Toplevel(self.root)
+        self._gpu_win = win
+        win.title("GPU 优化（optimizerDuck）")
+        win.geometry("760x620")
+        win.transient(self.root)
+        _apply_app_icon(win)
+
+        def _on_close():
+            self._gpu_win = None
+            win.destroy()
+        win.protocol("WM_DELETE_WINDOW", _on_close)
+
+        ttk.Label(win, text="🎮 GPU 优化（AMD / NVIDIA / Intel）", font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        ttk.Label(
+            win,
+            text="列表仅显示本机检测到的显卡厂商适用的调优项（运行时读取注册表 Class 键检测）。"
+                 "应用写 HKLM\\...\\Control\\Class\\{4d36e968-...}\\XXXX，需管理员（触发 UAC）。",
+            font=("Microsoft YaHei UI", 9), foreground="#555", wraplength=720, justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 6))
+
+        list_frame = ttk.LabelFrame(win, text="GPU 调优开关", padding=4)
+        list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
+
+        cols = ("check", "name", "desc", "status", "risk")
+        tree = ttk.Treeview(list_frame, columns=cols, show="headings")
+        tree.heading("check", text="")
+        tree.heading("name", text="开关")
+        tree.heading("desc", text="说明")
+        tree.heading("status", text="状态")
+        tree.heading("risk", text="风险")
+        tree.column("check", width=30, anchor="center", stretch=False)
+        tree.column("name", width=210, stretch=False)
+        tree.column("desc", width=300)
+        tree.column("status", width=70, anchor="center", stretch=False)
+        tree.column("risk", width=50, anchor="center", stretch=False)
+        tree.grid(row=0, column=0, sticky="nsew")
+        vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=vsb.set)
+        tree.tag_configure("checked", background="#e8f5e9")
+        tree.tag_configure("highrisk", foreground="#b00020")
+        tree.tag_configure("done", foreground="#1565c0")
+
+        self._gpu_tree = tree
+        self._gpu_vars = {}
+        self._gpu_applicable = []
+        self._gpu_indexes = []
+        self._gpu_status = tk.StringVar(value="正在检测显卡……")
+        ttk.Label(win, textvariable=self._gpu_status,
+                  font=("Microsoft YaHei UI", 9), foreground="#b00020",
+                  wraplength=720, justify="left").pack(anchor="w", padx=12, pady=(0, 4))
+
+        bar = ttk.Frame(win)
+        bar.pack(fill="x", padx=12, pady=(0, 4))
+        ttk.Button(bar, text="全选", command=lambda: self._gpu_set_all(True)).pack(side="left", padx=2)
+        ttk.Button(bar, text="全不选", command=lambda: self._gpu_set_all(False)).pack(side="left", padx=2)
+        ttk.Button(bar, text="应用所选", command=lambda: self._gpu_execute("apply")).pack(side="right", padx=2)
+        ttk.Button(bar, text="还原所选", command=lambda: self._gpu_execute("revert")).pack(side="right", padx=2)
+
+        threading.Thread(target=self._gpu_detect, args=(win,), daemon=True).start()
+
+    def _gpu_detect(self, win):
+        try:
+            script = (
+                "$base='HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}';"
+                "$arr=@(Get-ChildItem $base | ForEach-Object {"
+                "  $idx=$_.PSChildName;"
+                "  $d=(Get-ItemProperty \"$base\\$idx\" -Name DriverDesc -ErrorAction SilentlyContinue).DriverDesc;"
+                "  [PSCustomObject]@{Index=$idx;Desc=$d}"
+                "});"
+                "$arr | ConvertTo-Json -Compress"
+            )
+            b64 = base64.b64encode(script.encode("utf-16-le")).decode()
+            r = subprocess.run("powershell -NoProfile -EncodedCommand " + b64, shell=True,
+                               capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            gpus = []
+            raw = (r.stdout or "").strip()
+            if raw:
+                try:
+                    data = json.loads(raw)
+                    if isinstance(data, dict):
+                        data = [data]
+                    for g in data:
+                        desc = str(g.get("Desc", "") or "")
+                        idx = str(g.get("Index", "") or "")
+                        if not desc or not idx:
+                            continue
+                        u = desc.upper()
+                        vendor = "其他"
+                        if "NVIDIA" in u:
+                            vendor = "NVIDIA"
+                        elif "AMD" in u:
+                            vendor = "AMD"
+                        elif "INTEL" in u:
+                            vendor = "Intel"
+                        gpus.append((idx, vendor, desc))
+                except Exception as e:
+                    self._log(f"[GPU] 解析失败：{e}；原始：{raw[:200]}")
+            self.root.after(0, self._gpu_populate, win, gpus)
+        except Exception as e:
+            self._log(f"[GPU] 检测异常：{e}")
+            self.root.after(0, self._gpu_populate, win, [])
+
+    def _gpu_populate(self, win, gpus):
+        tree = self._gpu_tree
+        vendors = {v for _, v, _ in gpus}
+        applicable = [o for o in GPU_OPTS if o["vendor"] in vendors]
+        self._gpu_applicable = applicable
+        self._gpu_indexes = [(i, v) for i, v, _ in gpus if v in ("AMD", "NVIDIA", "Intel")]
+        kids = tree.get_children()
+        if kids:
+            tree.delete(*kids)
+        self._gpu_vars.clear()
+        for idx, opt in enumerate(applicable):
+            iid = str(idx)
+            self._gpu_vars[iid] = tk.BooleanVar(value=False)
+            tags = ["highrisk"] if opt["risk"] == "高" else []
+            tree.insert("", "end", iid=iid,
+                        values=("☐", f"[{opt['vendor']}] {opt['name']}", _elide(opt["desc"], 36), "未操作", opt["risk"]),
+                        tags=tuple(tags))
+        tree.bind("<Button-1>", self._on_gpu_click)
+        if not gpus:
+            self._gpu_status.set("未检测到显卡，或无权限读取注册表（请以管理员运行后重试）。")
+        else:
+            info = "；".join(f"{d}（{v}）" for _, v, d in gpus)
+            suffix = "" if applicable else "（无适用调优项）"
+            self._gpu_status.set("检测到：" + info + suffix)
+
+    def _on_gpu_click(self, event):
+        tree = self._gpu_tree
+        if tree.identify("region", event.x, event.y) != "cell":
+            return
+        if tree.identify_column(event.x) != "#1":
+            return
+        iid = tree.identify_row(event.y)
+        if not iid or iid not in self._gpu_vars:
+            return
+        self._gpu_vars[iid].set(not self._gpu_vars[iid].get())
+        self._gpu_redraw(iid)
+
+    def _gpu_redraw(self, iid):
+        tree = self._gpu_tree
+        checked = self._gpu_vars[iid].get()
+        vals = list(tree.item(iid, "values"))
+        vals[0] = "☑" if checked else "☐"
+        tags = []
+        if self._gpu_applicable[int(iid)]["risk"] == "高":
+            tags.append("highrisk")
+        if checked:
+            tags.append("checked")
+        if vals[3] in ("已应用", "已还原"):
+            tags.append("done")
+        tree.item(iid, values=vals, tags=tuple(tags))
+
+    def _gpu_set_all(self, val):
+        for iid in self._gpu_vars:
+            self._gpu_vars[iid].set(val)
+            self._gpu_redraw(iid)
+
+    def _gpu_execute(self, mode):
+        if getattr(self, "_gpu_busy", False):
+            messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._gpu_win)
+            return
+        sel = [(iid, self._gpu_applicable[int(iid)]) for iid in self._gpu_vars if self._gpu_vars[iid].get()]
+        if not sel:
+            messagebox.showwarning("提示", "请至少勾选一项（若列表为空说明本机无适用显卡）。", parent=self._gpu_win)
+            return
+        verb = "应用" if mode == "apply" else "还原"
+        names = "、".join(f"[{o['vendor']}]{o['name']}" for _, o in sel)
+        risk = (f"即将{verb}以下 {len(sel)} 项 GPU 调优（写入 HKLM\\...\\Control\\Class\\{{4d36e968-...}}\\XXXX）：\n\n{names}\n\n"
+                "全部可逆——之后勾选相同项点“还原所选”即删除覆写值、恢复驱动默认。需管理员，将触发 UAC。\n\n确认？")
+        if not messagebox.askyesno("确认" + verb, risk, parent=self._gpu_win):
+            self._log("[GPU] 已取消。")
+            return
+        cmds = []
+        for _, o in sel:
+            for idx, vendor in self._gpu_indexes:
+                if vendor != o["vendor"]:
+                    continue
+                path = f"SYSTEM\\CurrentControlSet\\Control\\Class\\{{4d36e968-e325-11ce-bfc1-08002be10318}}\\{idx}"
+                for name, val in o["regs"]:
+                    if mode == "apply":
+                        cmds.append(_reg_add("HKLM", path, name, val))
+                    else:
+                        cmds.append(_reg_del("HKLM", path, name))
+        if not cmds:
+            messagebox.showwarning("提示", "未找到匹配的 GPU 注册表索引，无法应用。", parent=self._gpu_win)
+            return
+        full = " & ".join(cmds)
+        self._gpu_busy = True
+        self._gpu_status.set(f"{verb}中：{names}")
+        self._log(f"[GPU] {verb} {len(sel)} 项……")
+        if is_admin():
+            threading.Thread(target=self._gpu_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
+        else:
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
+            if ret > 32:
+                for iid, _ in sel:
+                    self._gpu_set_status(iid, "已" + verb)
+                self._gpu_busy = False
+                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._gpu_win)
+            else:
+                self._gpu_busy = False
+                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._gpu_win)
+
+    def _gpu_thread(self, full, mode, iids):
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[GPU] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._gpu_done, mode, iids, r.returncode)
+        except Exception as e:
+            self._log(f"[GPU] 执行异常：{e}")
+            self.root.after(0, self._gpu_done, mode, iids, -1)
+
+    def _gpu_done(self, mode, iids, code):
+        self._gpu_busy = False
+        verb = "已应用" if mode == "apply" else "已还原"
+        for iid in iids:
+            self._gpu_set_status(iid, verb)
+        self._gpu_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
+        self._log(f"[GPU] {verb} {len(iids)} 项，返回码 {code}。")
+
+    def _gpu_set_status(self, iid, text):
+        tree = self._gpu_tree
+        vals = list(tree.item(iid, "values"))
+        vals[3] = text
+        tree.item(iid, values=vals)
+        self._gpu_redraw(iid)
+
+    # ---- 启动项管理器（optimizerDuck：注册表 Run + 启动文件夹 + 计划任务）----
+    def open_startup(self):
+        if getattr(self, "_startup_win", None) is not None:
+            try:
+                self._startup_win.deiconify(); self._startup_win.lift(); return
+            except Exception:
+                self._startup_win = None
+        win = tk.Toplevel(self.root)
+        self._startup_win = win
+        win.title("启动项管理（optimizerDuck）")
+        win.geometry("840x620")
+        win.transient(self.root)
+        _apply_app_icon(win)
+
+        def _on_close():
+            self._startup_win = None
+            win.destroy()
+        win.protocol("WM_DELETE_WINDOW", _on_close)
+
+        ttk.Label(win, text="🚀 启动项管理", font=("Microsoft YaHei UI", 13, "bold")).pack(anchor="w", padx=12, pady=(10, 2))
+        ttk.Label(
+            win,
+            text="枚举本机开机自启项（注册表 Run 键 / 启动文件夹 / 计划任务）。勾选后“禁用所选/启用所选”"
+                 "即写入 StartupApproved 或调整计划任务状态。HKLM 与计划任务需管理员（触发 UAC）。",
+            font=("Microsoft YaHei UI", 9), foreground="#555", wraplength=800, justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 6))
+
+        list_frame = ttk.LabelFrame(win, text="启动项", padding=4)
+        list_frame.pack(fill="both", expand=True, padx=12, pady=(0, 6))
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
+
+        cols = ("check", "name", "cmd", "loc", "state")
+        tree = ttk.Treeview(list_frame, columns=cols, show="headings")
+        tree.heading("check", text="")
+        tree.heading("name", text="名称")
+        tree.heading("cmd", text="命令/路径")
+        tree.heading("loc", text="位置")
+        tree.heading("state", text="状态")
+        tree.column("check", width=30, anchor="center", stretch=False)
+        tree.column("name", width=150, stretch=False)
+        tree.column("cmd", width=340)
+        tree.column("loc", width=150, stretch=False)
+        tree.column("state", width=70, anchor="center", stretch=False)
+        tree.grid(row=0, column=0, sticky="nsew")
+        vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
+        vsb.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=vsb.set)
+        tree.tag_configure("disabled", foreground="#b00020")
+        tree.tag_configure("enabled", foreground="#1565c0")
+
+        self._startup_tree = tree
+        self._startup_vars = {}
+        self._startup_items = []
+        self._startup_status = tk.StringVar(value="正在枚举启动项……")
+        ttk.Label(win, textvariable=self._startup_status,
+                  font=("Microsoft YaHei UI", 9), foreground="#555",
+                  wraplength=800, justify="left").pack(anchor="w", padx=12, pady=(0, 4))
+
+        bar = ttk.Frame(win)
+        bar.pack(fill="x", padx=12, pady=(0, 4))
+        ttk.Button(bar, text="刷新", command=self._startup_refresh).pack(side="left", padx=2)
+        ttk.Button(bar, text="禁用所选", command=lambda: self._startup_toggle(False)).pack(side="right", padx=2)
+        ttk.Button(bar, text="启用所选", command=lambda: self._startup_toggle(True)).pack(side="right", padx=2)
+
+        tree.bind("<Button-1>", self._on_startup_click)
+        threading.Thread(target=self._startup_enumerate, args=(win,), daemon=True).start()
+
+    def _startup_refresh(self):
+        self._startup_status.set("正在枚举启动项……")
+        threading.Thread(target=self._startup_enumerate, args=(self._startup_win,), daemon=True).start()
+
+    def _startup_enumerate(self, win):
+        try:
+            script = (
+                "$ErrorActionPreference='SilentlyContinue';"
+                "$items=@();"
+                "$regs=@("
+                "@{H='HKCU';P='Software\\Microsoft\\Windows\\CurrentVersion\\Run';A='Run'},"
+                "@{H='HKLM';P='Software\\Microsoft\\Windows\\CurrentVersion\\Run';A='Run'},"
+                "@{H='HKCU';P='Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce';A='RunOnce'},"
+                "@{H='HKLM';P='Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce';A='RunOnce'});"
+                "foreach($r in $regs){"
+                "  $key=\"$($r.H):\\$($r.P)\";"
+                "  $appr=\"$($r.H):\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\$($r.A)\";"
+                "  if(Test-Path $key){"
+                "    $k=Get-Item $key;"
+                "    foreach($vn in $k.GetValueNames()){"
+                "      if($vn-eq''){continue};"
+                "      $cmd=(Get-ItemProperty -Path $key -Name $vn).$vn;"
+                "      $en=$true;"
+                "      $b=(Get-ItemProperty -Path $appr -Name $vn -ErrorAction SilentlyContinue).$vn;"
+                "      if($b-is[byte[]]-and$b.Length-ge 1){$en=($b[0]-ne 3-and$b[0]-ne 7)};"
+                "      $items+=[PSCustomObject]@{Name=$vn;Cmd=$cmd;Loc=\"$($r.H)\\Run\";Kind='app';Root=\"$($r.H)\";Appr=\"$($r.A)\";VN=$vn;Enabled=$en}"
+                "    }"
+                "  }"
+                "};"
+                "$fols=@("
+                "@{H='HKCU';F=[Environment]::GetFolderPath('Startup')},"
+                "@{H='HKLM';F=[Environment]::GetFolderPath('CommonStartup')});"
+                "foreach($s in $fols){"
+                "  $appr=\"$($s.H):\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\StartupFolder\";"
+                "  if(Test-Path $s.F){"
+                "    Get-ChildItem $s.F|Where-Object{$_.Name-ne'desktop.ini'}|ForEach-Object{"
+                "      $fn=$_.Name;$en=$true;"
+                "      $b=(Get-ItemProperty -Path $appr -Name $fn -ErrorAction SilentlyContinue).$fn;"
+                "      if($b-is[byte[]]-and$b.Length-ge 1){$en=($b[0]-ne 3-and$b[0]-ne 7)};"
+                "      $items+=[PSCustomObject]@{Name=$fn;Cmd=$_.FullName;Loc='Folder';Kind='app';Root=\"$($s.H)\";Appr='StartupFolder';VN=$fn;Enabled=$en}"
+                "    }"
+                "  }"
+                "};"
+                "Get-ScheduledTask|ForEach-Object{"
+                "  $t=$_;$has=$false;"
+                "  if($t.Triggers){foreach($tr in $t.Triggers){if($tr.GetType().Name-match'Logon|Startup|Boot'){$has=$true;break}}};"
+                "  if($has){"
+                "    $en=($t.State-ne'Disabled');"
+                "    $items+=[PSCustomObject]@{Name=$t.TaskName;Cmd=(($t.Actions|ForEach-Object{$_.Execute})-join' ');Loc='Task';Kind='task';Root='';Appr='';VN=$t.TaskName;Key=$t.TaskPath;Enabled=$en}"
+                "  }"
+                "};"
+                "$items|ConvertTo-Json -Compress"
+            )
+            b64 = base64.b64encode(script.encode("utf-16-le")).decode()
+            r = subprocess.run("powershell -NoProfile -EncodedCommand " + b64, shell=True,
+                               capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            raw = (r.stdout or "").strip()
+            items = []
+            if raw and raw != "[]":
+                try:
+                    data = json.loads(raw)
+                    if isinstance(data, dict):
+                        data = [data]
+                    for it in data:
+                        items.append({
+                            "Name": str(it.get("Name", "")),
+                            "Cmd": str(it.get("Cmd", "") or ""),
+                            "Loc": str(it.get("Loc", "")),
+                            "Kind": str(it.get("Kind", "")),
+                            "Root": str(it.get("Root", "")),
+                            "Appr": str(it.get("Appr", "")),
+                            "VN": str(it.get("VN", "")),
+                            "Key": str(it.get("Key", "")),
+                            "Enabled": bool(it.get("Enabled", True)),
+                        })
+                except Exception as e:
+                    self._log(f"[启动项] 解析失败：{e}；原始：{raw[:200]}")
+            self.root.after(0, self._startup_populate, win, items)
+        except Exception as e:
+            self._log(f"[启动项] 枚举异常：{e}")
+            self.root.after(0, self._startup_populate, win, [])
+
+    def _startup_populate(self, win, items):
+        tree = self._startup_tree
+        kids = tree.get_children()
+        if kids:
+            tree.delete(*kids)
+        self._startup_vars.clear()
+        self._startup_items = items
+        for idx, it in enumerate(items):
+            iid = str(idx)
+            self._startup_vars[iid] = tk.BooleanVar(value=False)
+            state = "启用" if it["Enabled"] else "禁用"
+            tags = ("disabled",) if not it["Enabled"] else ("enabled",)
+            tree.insert("", "end", iid=iid,
+                        values=("☐", _elide(it["Name"], 22), _elide(it["Cmd"], 48), it["Loc"], state),
+                        tags=tags)
+        self._startup_status.set(f"枚举完成：共 {len(items)} 项（注册表/文件夹/计划任务）。")
+
+    def _on_startup_click(self, event):
+        tree = self._startup_tree
+        if tree.identify("region", event.x, event.y) != "cell":
+            return
+        if tree.identify_column(event.x) != "#1":
+            return
+        iid = tree.identify_row(event.y)
+        if not iid or iid not in self._startup_vars:
+            return
+        self._startup_vars[iid].set(not self._startup_vars[iid].get())
+        vals = list(tree.item(iid, "values"))
+        vals[0] = "☑" if self._startup_vars[iid].get() else "☐"
+        tree.item(iid, values=vals)
+
+    def _startup_toggle(self, enable):
+        if getattr(self, "_startup_busy", False):
+            messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._startup_win)
+            return
+        sel = [self._startup_items[int(iid)] for iid in self._startup_vars if self._startup_vars[iid].get()]
+        if not sel:
+            messagebox.showwarning("提示", "请至少勾选一项。", parent=self._startup_win)
+            return
+        verb = "启用" if enable else "禁用"
+        names = "、".join(it["Name"] for it in sel)
+        risk = (f"即将{verb}以下 {len(sel)} 个启动项：\n\n{names}\n\n"
+                "注册表项/计划任务类需管理员（将触发 UAC）。此操作可逆（再次勾选并反向操作即可）。\n\n确认？")
+        if not messagebox.askyesno("确认" + verb, risk, parent=self._startup_win):
+            self._log("[启动项] 已取消。")
+            return
+        cmds = []
+        for it in sel:
+            if it["Kind"] == "app":
+                flag = "02" if enable else "03"
+                data = flag + "00000000000000000000000000000000"
+                appr_key = f"{it['Root']}\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\{it['Appr']}"
+                vn = it["VN"].replace('"', "")
+                cmds.append(f'reg add "{appr_key}" /v "{vn}" /t REG_BINARY /d {data} /f')
+            else:
+                tn = (it["Key"].rstrip("\\") + "\\" + it["VN"]).strip("\\")
+                cmds.append(f'schtasks /Change /TN "{tn}" /{"ENABLE" if enable else "DISABLE"}')
+        full = " & ".join(cmds)
+        self._startup_busy = True
+        self._startup_status.set(f"{verb}中：{names}")
+        self._log(f"[启动项] {verb} {len(sel)} 项……")
+        if is_admin():
+            threading.Thread(target=self._startup_thread, args=(full, enable, sel), daemon=True).start()
+        else:
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
+            if ret > 32:
+                self._startup_busy = False
+                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._startup_win)
+            else:
+                self._startup_busy = False
+                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._startup_win)
+
+    def _startup_thread(self, full, enable, sel):
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[启动项] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._startup_done, enable, sel, r.returncode)
+        except Exception as e:
+            self._log(f"[启动项] 执行异常：{e}")
+            self.root.after(0, self._startup_done, enable, sel, -1)
+
+    def _startup_done(self, enable, sel, code):
+        self._startup_busy = False
+        verb = "已启用" if enable else "已禁用"
+        for it in sel:
+            it["Enabled"] = enable
+        self._startup_refresh()
+        self._startup_status.set(f"{verb} {len(sel)} 项。返回码 {code}。")
+        self._log(f"[启动项] {verb} {len(sel)} 项，返回码 {code}。")
 
     # ---- 一键系统优化（需管理员，执行前二次确认）----
     def _run_admin_cmd(self, cmds, title, risk_note):

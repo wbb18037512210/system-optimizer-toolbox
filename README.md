@@ -10,7 +10,10 @@ Windows 系统优化工具箱（tkinter GUI，单文件 `.pyw`），自带多分
 - **一键优化**：高性能电源、卓越电源、快速启动、关闭防火墙、关闭 Windows Defender、关闭 UAC、关闭系统还原、关闭 Win 更新、清理 DNS、关闭传递优化（DoSvc）、禁用 SysMain、关闭搜索索引、关闭透明动画、关闭遥测、关闭休眠。每项执行前二次确认，并注明可逆恢复方法。
 - **卸载预装应用**：内置 36 项 Win10/11 预装 UWP 应用清单（计算器、照片、Xbox、Groove、天气、Spotify 等），一键“检测已安装”并批量卸载。仅卸当前用户、卸载后可从 Microsoft Store 重装（可逆），系统 UI 组件（如 XboxGameCallableUI）自动排除。清单与卸载思路整合自开源项目 [PyDebloatX](https://github.com/Teraskull/PyDebloatX)（MIT License）。
 - **深度优化**：整合自开源 [Optimizer](https://github.com/hellzerg/Optimizer)（MIT License）的 19 项注册表 / 服务微调开关面板，可勾选、一键“应用所选”或“还原所选”（全部可逆）。覆盖 Xbox 游戏栏 / 录制、Widgets、Teams Chat、Copilot、开始菜单广告、资讯与兴趣、粘滞键、长路径、云剪贴板、Edge 遥测、错误报告（WER）、定位传感器、快速访问、拼写预测、Windows Ink、Snap 助手、Win11 经典右键菜单、性能微调、SmartScreen（高风险，谨慎开启）。与“一键优化”区刻意不重复（遥测 / SysMain / 系统还原 / 搜索索引 / 透明 / Win 更新 / 传递优化 / UAC / Defender / 防火墙 / 休眠等不在本面板）。
-- **系统工具快捷入口**：控制面板、任务管理器、卸载程序、磁盘清理、系统信息、设备管理器、磁盘管理、服务、上帝模式、卸载预装应用、深度优化、Win10 优化、360 联网助手。
+- **GPU 优化**：整合自开源 [optimizerDuck](https://github.com/itsfatduck/optimizerDuck)（GPL v3）的显卡深度调优。运行时读取注册表自动检测本机显卡厂商，仅显示 AMD / NVIDIA / Intel 适用的 8 项开关（禁用 ULPS、电源门控、时钟门控、ASPM、动态 / 异步 P-state、异步翻转、自适应垂直同步），写入 `HKLM\...\Control\Class\{4d36e968-...}\XXXX`，全部可逆（还原即删除覆写值恢复驱动默认）。
+- **电源 / 性能细项**：整合自 optimizerDuck 的两项独有调整——禁用系统电源节流（PowerThrottlingOff=1 + 关闭 USB 意外移除自动恢复）、禁用 USB 设备节能挂起（CIM `MSPower_DeviceEnable`），降低延迟、提升性能。
+- **启动项管理**：整合自 optimizerDuck 的启动项管理器。枚举本机开机自启项（注册表 Run 键 / 启动文件夹 / 计划任务），勾选后一键“禁用所选 / 启用所选”，通过 `StartupApproved` 注册表标志或计划任务状态切换，可逆。
+- **系统工具快捷入口**：控制面板、任务管理器、卸载程序、磁盘清理、系统信息、设备管理器、磁盘管理、服务、上帝模式、卸载预装应用、深度优化、GPU 优化、电源/性能、启动项管理、Win10 优化、360 联网助手。
 - **运行日志面板**：底部实时显示操作结果。
 - **自定义应用图标**：窗口左上角、任务栏、Alt-Tab 均显示 `icon.ico`（多分辨率：16/24/32/48/64/128/256）。
 
@@ -68,6 +71,7 @@ pyinstaller --noconsole --onefile --icon icon.ico \
 
 - 预装应用卸载清单与思路来自 [PyDebloatX](https://github.com/Teraskull/PyDebloatX)（MIT License，Copyright © 2020-2021 Anton Grouchtchak）。
 - 深度优化面板的注册表 / 服务调整移植自开源 [Optimizer](https://github.com/hellzerg/Optimizer)（MIT License，Copyright © 2019-2024 hellzerg）。
+- GPU 优化、电源 / 性能细项、启动项管理移植自开源 [optimizerDuck](https://github.com/itsfatduck/optimizerDuck)（GPL v3，Copyright © 2026 fatDuck）。
 
 ## 免责声明
 
