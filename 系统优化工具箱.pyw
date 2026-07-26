@@ -2385,6 +2385,9 @@ class CleanerApp:
         self._debloat_uninstall_btn = ttk.Button(
             bar, text="🗑 卸载选中", command=self._debloat_uninstall)
         self._debloat_uninstall_btn.pack(side="right", padx=2)
+        self._debloat_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
+                                              command=self._cancel_running)
+        self._debloat_cancel_btn.pack(side="right", padx=2)
 
         self._debloat_status = tk.StringVar(
             value="提示：先点“检测已安装”，未安装的项无需卸载。")
@@ -2511,13 +2514,21 @@ class CleanerApp:
             return
 
         self._debloat_busy = True
+        self._busy = True
+        self._cancel_flag = False
         self._debloat_uninstall_btn.configure(state="disabled")
-        self._debloat_status.set(f"正在卸载 {len(selected)} 个应用……")
+        self._debloat_cancel_btn.configure(state="normal")
+        self._debloat_status.set(f"⏳ 正在卸载 {len(selected)} 个应用……（可点“取消”中止）")
         self._log(f"[卸载预装] 开始卸载 {len(selected)} 个应用……")
 
         def worker():
             ok, fail = 0, 0
+            cancelled = False
             for iid, app in selected:
+                if self._cancel_flag:
+                    cancelled = True
+                    self._log("[卸载预装] 用户已取消，停止后续卸载。")
+                    break
                 if app.get("xbox"):
                     ps = ("Get-AppxPackage *Xbox* | Where-Object "
                           "{$_.Name -notmatch 'XboxGameCallableUI'} | "
@@ -2552,7 +2563,7 @@ class CleanerApp:
                     fail += 1
                     self._log(f"  [失败/跳过] {app['name']}")
                 self.root.after(0, self._debloat_mark_result, iid, gone)
-            self.root.after(0, self._debloat_uninstall_done, ok, fail)
+            self.root.after(0, self._debloat_uninstall_done, ok, fail, cancelled)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -2564,16 +2575,27 @@ class CleanerApp:
         tree.item(iid, values=vals)
         self._debloat_redraw(iid)
 
-    def _debloat_uninstall_done(self, ok, fail):
+    def _debloat_uninstall_done(self, ok, fail, cancelled=False):
         self._debloat_busy = False
+        self._busy = False
         self._debloat_uninstall_btn.configure(state="normal")
-        self._debloat_status.set(f"卸载完成：成功 {ok} 项，失败/跳过 {fail} 项。")
-        self._log(f"[卸载预装] 全部完成：成功 {ok}，失败/跳过 {fail}。")
-        messagebox.showinfo(
-            "卸载完成",
-            f"成功卸载 {ok} 项，失败/跳过 {fail} 项。\n详见运行日志。",
-            parent=self._debloat_win,
-        )
+        self._debloat_cancel_btn.configure(state="disabled")
+        if cancelled:
+            self._debloat_status.set(f"已取消：成功 {ok} 项，失败/跳过 {fail} 项。")
+            self._log(f"[卸载预装] 已取消：成功 {ok}，失败/跳过 {fail}。")
+            messagebox.showinfo(
+                "已取消",
+                f"卸载已中止。\n成功 {ok} 项，失败/跳过 {fail} 项。\n详见运行日志。",
+                parent=self._debloat_win,
+            )
+        else:
+            self._debloat_status.set(f"卸载完成：成功 {ok} 项，失败/跳过 {fail} 项。")
+            self._log(f"[卸载预装] 全部完成：成功 {ok}，失败/跳过 {fail}。")
+            messagebox.showinfo(
+                "卸载完成",
+                f"成功卸载 {ok} 项，失败/跳过 {fail} 项。\n详见运行日志。",
+                parent=self._debloat_win,
+            )
 
     # ---- Windows 深度优化（提取自开源 Optimizer 的注册表开关）----
     def open_deep(self):
@@ -2650,8 +2672,14 @@ class CleanerApp:
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="全选", command=lambda: self._deep_set_all(True)).pack(side="left", padx=2)
         ttk.Button(bar, text="全不选", command=lambda: self._deep_set_all(False)).pack(side="left", padx=2)
-        ttk.Button(bar, text="应用所选", command=lambda: self._deep_execute("apply")).pack(side="right", padx=2)
-        ttk.Button(bar, text="还原所选", command=lambda: self._deep_execute("revert")).pack(side="right", padx=2)
+        self._deep_apply_btn = ttk.Button(bar, text="应用所选", command=lambda: self._deep_execute("apply"))
+        self._deep_apply_btn.pack(side="right", padx=2)
+        self._deep_revert_btn = ttk.Button(bar, text="还原所选", command=lambda: self._deep_execute("revert"))
+        self._deep_revert_btn.pack(side="right", padx=2)
+        # 执行期间亮起的“取消”按钮（与统一异步执行器联动）
+        self._deep_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
+                                           command=self._cancel_running)
+        self._deep_cancel_btn.pack(side="right", padx=2)
 
         self._deep_status = tk.StringVar(value="提示：逐项勾选，再点“应用所选”或“还原所选”。")
         ttk.Label(win, textvariable=self._deep_status,
@@ -2691,7 +2719,7 @@ class CleanerApp:
             self._deep_redraw(iid)
 
     def _deep_execute(self, mode):
-        if getattr(self, "_deep_busy", False):
+        if getattr(self, "_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._deep_win)
             return
         sel = [(iid, DEEP_OPTS[int(iid)]) for iid in self._deep_vars if self._deep_vars[iid].get()]
@@ -2703,43 +2731,26 @@ class CleanerApp:
         risk = (f"即将{verb}以下 {len(sel)} 项深度优化（注册表/服务调整）：\n\n{names}\n\n"
                 "说明：全部可逆——之后勾选相同项并点“还原所选”即可恢复 Windows 默认。"
                 "写 HKLM 的项需管理员权限，将触发 UAC。\n\n确认？")
-        if not messagebox.askyesno("确认" + verb, risk, parent=self._deep_win):
-            self._log(f"[深度优化] 已取消。")
-            return
         cmds = []
         for _, o in sel:
             cmds.extend(o[mode])
-        full = " & ".join(cmds)
-        self._deep_busy = True
-        self._deep_status.set(f"{verb}中：{names}")
+        iids = [iid for iid, _ in sel]
+        self._deep_status.set(f"⏳ {verb}中：{names}")
         self._log(f"[深度优化] {verb} {len(sel)} 项……")
-        if is_admin():
-            threading.Thread(target=self._deep_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
-        else:
-            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
-            if ret > 32:
-                for iid, _ in sel:
-                    self._deep_set_status(iid, "已" + verb)
-                self._deep_busy = False
-                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._deep_win)
-            else:
-                self._deep_busy = False
-                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._deep_win)
-
-    def _deep_thread(self, full, mode, iids):
-        try:
-            r = subprocess.run(full, shell=True, capture_output=True, text=True,
-                               creationflags=subprocess.CREATE_NO_WINDOW)
-            out = (r.stdout or "") + (r.stderr or "")
-            self._log(f"[深度优化] 返回码 {r.returncode}\n{out.strip()}")
-            self.root.after(0, self._deep_done, mode, iids, r.returncode)
-        except Exception as e:
-            self._log(f"[深度优化] 执行异常：{e}")
-            self.root.after(0, self._deep_done, mode, iids, -1)
+        # 复用统一异步执行器：后台线程 + 按钮置灰 + 取消按钮亮起
+        self._run_admin_cmd(
+            cmds, "确认" + verb, risk,
+            on_done=lambda m, c: self._deep_done(m, iids, c),
+            btns=(self._deep_apply_btn, self._deep_revert_btn),
+            cancel_btn=self._deep_cancel_btn,
+            mode=mode, parent=self._deep_win,
+        )
 
     def _deep_done(self, mode, iids, code):
-        self._deep_busy = False
-        verb = "已应用" if mode == "apply" else "已还原"
+        if code == "CANCELLED":
+            verb = "已取消"
+        else:
+            verb = "已应用" if mode == "apply" else "已还原"
         for iid in iids:
             self._deep_set_status(iid, verb)
         self._deep_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
@@ -2817,8 +2828,13 @@ class CleanerApp:
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="全选", command=lambda: self._power_set_all(True)).pack(side="left", padx=2)
         ttk.Button(bar, text="全不选", command=lambda: self._power_set_all(False)).pack(side="left", padx=2)
-        ttk.Button(bar, text="应用所选", command=lambda: self._power_execute("apply")).pack(side="right", padx=2)
-        ttk.Button(bar, text="还原所选", command=lambda: self._power_execute("revert")).pack(side="right", padx=2)
+        self._power_apply_btn = ttk.Button(bar, text="应用所选", command=lambda: self._power_execute("apply"))
+        self._power_apply_btn.pack(side="right", padx=2)
+        self._power_revert_btn = ttk.Button(bar, text="还原所选", command=lambda: self._power_execute("revert"))
+        self._power_revert_btn.pack(side="right", padx=2)
+        self._power_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
+                                            command=self._cancel_running)
+        self._power_cancel_btn.pack(side="right", padx=2)
 
         self._power_status = tk.StringVar(value="提示：逐项勾选，再点“应用所选”或“还原所选”。")
         ttk.Label(win, textvariable=self._power_status,
@@ -2857,7 +2873,7 @@ class CleanerApp:
             self._power_redraw(iid)
 
     def _power_execute(self, mode):
-        if getattr(self, "_power_busy", False):
+        if getattr(self, "_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._power_win)
             return
         sel = [(iid, POWER_OPTS[int(iid)]) for iid in self._power_vars if self._power_vars[iid].get()]
@@ -2868,43 +2884,25 @@ class CleanerApp:
         names = "、".join(o["name"] for _, o in sel)
         risk = (f"即将{verb}以下 {len(sel)} 项电源/性能调整：\n\n{names}\n\n"
                 "全部可逆——之后勾选相同项点“还原所选”即可恢复。写 HKLM 需管理员，将触发 UAC。\n\n确认？")
-        if not messagebox.askyesno("确认" + verb, risk, parent=self._power_win):
-            self._log("[电源/性能] 已取消。")
-            return
         cmds = []
         for _, o in sel:
             cmds.extend(o[mode])
-        full = " & ".join(cmds)
-        self._power_busy = True
-        self._power_status.set(f"{verb}中：{names}")
+        iids = [iid for iid, _ in sel]
+        self._power_status.set(f"⏳ {verb}中：{names}")
         self._log(f"[电源/性能] {verb} {len(sel)} 项……")
-        if is_admin():
-            threading.Thread(target=self._power_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
-        else:
-            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
-            if ret > 32:
-                for iid, _ in sel:
-                    self._power_set_status(iid, "已" + verb)
-                self._power_busy = False
-                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._power_win)
-            else:
-                self._power_busy = False
-                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._power_win)
-
-    def _power_thread(self, full, mode, iids):
-        try:
-            r = subprocess.run(full, shell=True, capture_output=True, text=True,
-                               creationflags=subprocess.CREATE_NO_WINDOW)
-            out = (r.stdout or "") + (r.stderr or "")
-            self._log(f"[电源/性能] 返回码 {r.returncode}\n{out.strip()}")
-            self.root.after(0, self._power_done, mode, iids, r.returncode)
-        except Exception as e:
-            self._log(f"[电源/性能] 执行异常：{e}")
-            self.root.after(0, self._power_done, mode, iids, -1)
+        self._run_admin_cmd(
+            cmds, "确认" + verb, risk,
+            on_done=lambda m, c: self._power_done(m, iids, c),
+            btns=(self._power_apply_btn, self._power_revert_btn),
+            cancel_btn=self._power_cancel_btn,
+            mode=mode, parent=self._power_win,
+        )
 
     def _power_done(self, mode, iids, code):
-        self._power_busy = False
-        verb = "已应用" if mode == "apply" else "已还原"
+        if code == "CANCELLED":
+            verb = "已取消"
+        else:
+            verb = "已应用" if mode == "apply" else "已还原"
         for iid in iids:
             self._power_set_status(iid, verb)
         self._power_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
@@ -2980,8 +2978,13 @@ class CleanerApp:
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="全选", command=lambda: self._gpu_set_all(True)).pack(side="left", padx=2)
         ttk.Button(bar, text="全不选", command=lambda: self._gpu_set_all(False)).pack(side="left", padx=2)
-        ttk.Button(bar, text="应用所选", command=lambda: self._gpu_execute("apply")).pack(side="right", padx=2)
-        ttk.Button(bar, text="还原所选", command=lambda: self._gpu_execute("revert")).pack(side="right", padx=2)
+        self._gpu_apply_btn = ttk.Button(bar, text="应用所选", command=lambda: self._gpu_execute("apply"))
+        self._gpu_apply_btn.pack(side="right", padx=2)
+        self._gpu_revert_btn = ttk.Button(bar, text="还原所选", command=lambda: self._gpu_execute("revert"))
+        self._gpu_revert_btn.pack(side="right", padx=2)
+        self._gpu_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
+                                          command=self._cancel_running)
+        self._gpu_cancel_btn.pack(side="right", padx=2)
 
         threading.Thread(target=self._gpu_detect, args=(win,), daemon=True).start()
 
@@ -3084,7 +3087,7 @@ class CleanerApp:
             self._gpu_redraw(iid)
 
     def _gpu_execute(self, mode):
-        if getattr(self, "_gpu_busy", False):
+        if getattr(self, "_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._gpu_win)
             return
         sel = [(iid, self._gpu_applicable[int(iid)]) for iid in self._gpu_vars if self._gpu_vars[iid].get()]
@@ -3113,36 +3116,22 @@ class CleanerApp:
             messagebox.showwarning("提示", "未找到匹配的 GPU 注册表索引，无法应用。", parent=self._gpu_win)
             return
         full = " & ".join(cmds)
-        self._gpu_busy = True
-        self._gpu_status.set(f"{verb}中：{names}")
+        self._gpu_status.set(f"⏳ {verb}中：{names}")
         self._log(f"[GPU] {verb} {len(sel)} 项……")
-        if is_admin():
-            threading.Thread(target=self._gpu_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
-        else:
-            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
-            if ret > 32:
-                for iid, _ in sel:
-                    self._gpu_set_status(iid, "已" + verb)
-                self._gpu_busy = False
-                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._gpu_win)
-            else:
-                self._gpu_busy = False
-                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._gpu_win)
-
-    def _gpu_thread(self, full, mode, iids):
-        try:
-            r = subprocess.run(full, shell=True, capture_output=True, text=True,
-                               creationflags=subprocess.CREATE_NO_WINDOW)
-            out = (r.stdout or "") + (r.stderr or "")
-            self._log(f"[GPU] 返回码 {r.returncode}\n{out.strip()}")
-            self.root.after(0, self._gpu_done, mode, iids, r.returncode)
-        except Exception as e:
-            self._log(f"[GPU] 执行异常：{e}")
-            self.root.after(0, self._gpu_done, mode, iids, -1)
+        # 复用统一异步执行器（后台线程 + 按钮置灰 + 取消按钮亮起）
+        self._run_admin_cmd(
+            cmds, "确认" + verb, risk,
+            on_done=lambda m, c: self._gpu_done(m, [iid for iid, _ in sel], c),
+            btns=(self._gpu_apply_btn, self._gpu_revert_btn),
+            cancel_btn=self._gpu_cancel_btn,
+            mode=mode, parent=self._gpu_win,
+        )
 
     def _gpu_done(self, mode, iids, code):
-        self._gpu_busy = False
-        verb = "已应用" if mode == "apply" else "已还原"
+        if code == "CANCELLED":
+            verb = "已取消"
+        else:
+            verb = "已应用" if mode == "apply" else "已还原"
         for iid in iids:
             self._gpu_set_status(iid, verb)
         self._gpu_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
@@ -3216,8 +3205,13 @@ class CleanerApp:
         bar = ttk.Frame(win)
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="刷新", command=self._startup_refresh).pack(side="left", padx=2)
-        ttk.Button(bar, text="禁用所选", command=lambda: self._startup_toggle(False)).pack(side="right", padx=2)
-        ttk.Button(bar, text="启用所选", command=lambda: self._startup_toggle(True)).pack(side="right", padx=2)
+        self._startup_disable_btn = ttk.Button(bar, text="禁用所选", command=lambda: self._startup_toggle(False))
+        self._startup_disable_btn.pack(side="right", padx=2)
+        self._startup_enable_btn = ttk.Button(bar, text="启用所选", command=lambda: self._startup_toggle(True))
+        self._startup_enable_btn.pack(side="right", padx=2)
+        self._startup_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
+                                              command=self._cancel_running)
+        self._startup_cancel_btn.pack(side="right", padx=2)
 
         tree.bind("<Button-1>", self._on_startup_click)
         threading.Thread(target=self._startup_enumerate, args=(win,), daemon=True).start()
@@ -3336,7 +3330,7 @@ class CleanerApp:
         tree.item(iid, values=vals)
 
     def _startup_toggle(self, enable):
-        if getattr(self, "_startup_busy", False):
+        if getattr(self, "_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._startup_win)
             return
         sel = [self._startup_items[int(iid)] for iid in self._startup_vars if self._startup_vars[iid].get()]
@@ -3361,35 +3355,19 @@ class CleanerApp:
             else:
                 tn = (it["Key"].rstrip("\\") + "\\" + it["VN"]).strip("\\")
                 cmds.append(f'schtasks /Change /TN "{tn}" /{"ENABLE" if enable else "DISABLE"}')
-        full = " & ".join(cmds)
-        self._startup_busy = True
-        self._startup_status.set(f"{verb}中：{names}")
+        self._startup_status.set(f"⏳ {verb}中：{names}")
         self._log(f"[启动项] {verb} {len(sel)} 项……")
-        if is_admin():
-            threading.Thread(target=self._startup_thread, args=(full, enable, sel), daemon=True).start()
-        else:
-            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
-            if ret > 32:
-                self._startup_busy = False
-                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._startup_win)
-            else:
-                self._startup_busy = False
-                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._startup_win)
-
-    def _startup_thread(self, full, enable, sel):
-        try:
-            r = subprocess.run(full, shell=True, capture_output=True, text=True,
-                               creationflags=subprocess.CREATE_NO_WINDOW)
-            out = (r.stdout or "") + (r.stderr or "")
-            self._log(f"[启动项] 返回码 {r.returncode}\n{out.strip()}")
-            self.root.after(0, self._startup_done, enable, sel, r.returncode)
-        except Exception as e:
-            self._log(f"[启动项] 执行异常：{e}")
-            self.root.after(0, self._startup_done, enable, sel, -1)
+        # 复用统一异步执行器（后台线程 + 按钮置灰 + 取消按钮亮起）
+        self._run_admin_cmd(
+            cmds, "确认" + verb, risk,
+            on_done=lambda m, c: self._startup_done(enable, sel, c),
+            btns=(self._startup_disable_btn, self._startup_enable_btn),
+            cancel_btn=self._startup_cancel_btn,
+            mode=verb, parent=self._startup_win,
+        )
 
     def _startup_done(self, enable, sel, code):
-        self._startup_busy = False
-        verb = "已启用" if enable else "已禁用"
+        verb = "已取消" if code == "CANCELLED" else ("已启用" if enable else "已禁用")
         for it in sel:
             it["Enabled"] = enable
         self._startup_refresh()
@@ -3461,8 +3439,13 @@ class CleanerApp:
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="全选", command=lambda: self._optduck_set_all(True)).pack(side="left", padx=2)
         ttk.Button(bar, text="全不选", command=lambda: self._optduck_set_all(False)).pack(side="left", padx=2)
-        ttk.Button(bar, text="应用所选", command=lambda: self._optduck_execute("apply")).pack(side="right", padx=2)
-        ttk.Button(bar, text="还原所选", command=lambda: self._optduck_execute("revert")).pack(side="right", padx=2)
+        self._optduck_apply_btn = ttk.Button(bar, text="应用所选", command=lambda: self._optduck_execute("apply"))
+        self._optduck_apply_btn.pack(side="right", padx=2)
+        self._optduck_revert_btn = ttk.Button(bar, text="还原所选", command=lambda: self._optduck_execute("revert"))
+        self._optduck_revert_btn.pack(side="right", padx=2)
+        self._optduck_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
+                                              command=self._cancel_running)
+        self._optduck_cancel_btn.pack(side="right", padx=2)
 
         self._optduck_status = tk.StringVar(value="提示：逐项勾选，再点“应用所选”或“还原所选”。")
         ttk.Label(win, textvariable=self._optduck_status,
@@ -3501,7 +3484,7 @@ class CleanerApp:
             self._optduck_redraw(iid)
 
     def _optduck_execute(self, mode):
-        if getattr(self, "_optduck_busy", False):
+        if getattr(self, "_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._optduck_win)
             return
         sel = [(iid, OPTDUCK_OPTS[int(iid)]) for iid in self._optduck_vars if self._optduck_vars[iid].get()]
@@ -3512,43 +3495,25 @@ class CleanerApp:
         names = "、".join(o["name"] for _, o in sel)
         risk = (f"即将{verb}以下 {len(sel)} 项 optimizerDuck 优化（注册表/服务/计划任务/电源）：\n\n{names}\n\n"
                 "全部可逆——之后勾选相同项点“还原所选”即可恢复。写 HKLM / 服务 / 计划任务需管理员，将触发 UAC。\n\n确认？")
-        if not messagebox.askyesno("确认" + verb, risk, parent=self._optduck_win):
-            self._log("[optimizerDuck] 已取消。")
-            return
         cmds = []
         for _, o in sel:
             cmds.extend(o[mode])
-        full = " & ".join(cmds)
-        self._optduck_busy = True
-        self._optduck_status.set(f"{verb}中：{names}")
+        iids = [iid for iid, _ in sel]
+        self._optduck_status.set(f"⏳ {verb}中：{names}")
         self._log(f"[optimizerDuck] {verb} {len(sel)} 项……")
-        if is_admin():
-            threading.Thread(target=self._optduck_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
-        else:
-            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
-            if ret > 32:
-                for iid, _ in sel:
-                    self._optduck_set_status(iid, "已" + verb)
-                self._optduck_busy = False
-                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._optduck_win)
-            else:
-                self._optduck_busy = False
-                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._optduck_win)
-
-    def _optduck_thread(self, full, mode, iids):
-        try:
-            r = subprocess.run(full, shell=True, capture_output=True, text=True,
-                               creationflags=subprocess.CREATE_NO_WINDOW)
-            out = (r.stdout or "") + (r.stderr or "")
-            self._log(f"[optimizerDuck] 返回码 {r.returncode}\n{out.strip()}")
-            self.root.after(0, self._optduck_done, mode, iids, r.returncode)
-        except Exception as e:
-            self._log(f"[optimizerDuck] 执行异常：{e}")
-            self.root.after(0, self._optduck_done, mode, iids, -1)
+        self._run_admin_cmd(
+            cmds, "确认" + verb, risk,
+            on_done=lambda m, c: self._optduck_done(m, iids, c),
+            btns=(self._optduck_apply_btn, self._optduck_revert_btn),
+            cancel_btn=self._optduck_cancel_btn,
+            mode=mode, parent=self._optduck_win,
+        )
 
     def _optduck_done(self, mode, iids, code):
-        self._optduck_busy = False
-        verb = "已应用" if mode == "apply" else "已还原"
+        if code == "CANCELLED":
+            verb = "已取消"
+        else:
+            verb = "已应用" if mode == "apply" else "已还原"
         for iid in iids:
             self._optduck_set_status(iid, verb)
         self._optduck_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
@@ -3561,27 +3526,43 @@ class CleanerApp:
         tree.item(iid, values=vals)
         self._optduck_redraw(iid)
 
-    # ---- 一键系统优化（需管理员，执行前二次确认）----
-    def _run_admin_cmd(self, cmds, title, risk_note):
-        """以管理员权限顺序执行命令列表 cmds（命令字符串）。执行前先弹确认框说明风险/可逆方式。
-
-        - 若本工具已是管理员：提交到后台线程执行（避免 gpupdate/taskkill 等耗时命令
-          阻塞 tkinter 主线程导致界面卡死无响应），完成后回主线程弹结果。
-        - 若非管理员：用 ShellExecuteW(runas) 触发 UAC 提权执行（非阻塞，立即返回）。
-        所有项均可逆，恢复方法写在 risk_note 里告知用户。
+    # ---- 统一异步执行器（所有“优化/清理”按钮共用：后台线程 + loading 指示 + 可取消）----
+    def _run_admin_cmd(self, cmds, title, risk_note, on_done=None, btns=(),
+                       cancel_btn=None, mode=None, parent=None):
+        """统一的“管理员命令”异步执行器。所有优化面板与一键优化卡片都走这里，保证：
+        - 命令在后台线程执行，绝不阻塞 tkinter 主线程（界面全程可响应）；
+        - 执行期间传入的 btns 全部置灰、cancel_btn 亮起（明确的 loading 指示）；
+        - 支持中途取消（用户点“取消”→ 终止后台进程）；
+        - 完成后自动恢复按钮、调用 on_done(mode, code) 更新面板状态。
+        非管理员时改用 ShellExecuteW(runas) 触发 UAC（本进程不跟踪外部 cmd 进度）。
         """
         if getattr(self, "_busy", False):
-            messagebox.showwarning("请稍候", "上一条命令还在执行，请等待完成。")
+            messagebox.showwarning("请稍候", "上一条命令还在执行，请等待完成。", parent=parent)
             return False
-        if not messagebox.askyesno(title, risk_note):
+        if not messagebox.askyesno(title, risk_note, parent=parent):
             self._log(f"[{title}] 已取消。")
             return False
         full = " & ".join(cmds)
+        self._busy = True
+        self._cancel_flag = False
+        self._running_proc = None
+        btns = list(btns or ())
+        for b in btns:
+            try:
+                b.configure(state="disabled")
+            except Exception:
+                pass
+        if cancel_btn is not None:
+            try:
+                cancel_btn.configure(state="normal")
+            except Exception:
+                pass
+        self._log(f"[{title}] 正在后台执行，请稍候…（界面可正常操作，可点“取消”中止）")
         if is_admin():
-            self._busy = True
-            self._log(f"[{title}] 正在执行，请稍候…（组策略刷新可能耗时数十秒，界面照常可操作）")
             threading.Thread(
-                target=self._exec_admin_thread, args=(full, title), daemon=True
+                target=self._exec_admin_thread,
+                args=(full, title, on_done, mode, btns, cancel_btn, parent),
+                daemon=True,
             ).start()
             return None
         else:
@@ -3591,37 +3572,87 @@ class CleanerApp:
             ok = ret > 32
             self._log(f"[{title}] UAC 提权启动，ShellExecute 返回 {ret}")
             if ok:
-                messagebox.showinfo(title, "已请求管理员权限执行（详见命令窗口/日志）。")
+                messagebox.showinfo(title, "已请求管理员权限执行（详见命令窗口/日志）。", parent=parent)
             else:
-                messagebox.showerror(title, "提权失败，请手动以管理员身份运行本工具。")
-            # 非管理员路径：命令在外部 cmd 窗口执行，本进程不阻塞，
-            # 提权窗口关闭后立即恢复按钮（本进程不再跟踪进度）。
-            self._restore_opt_btn()
+                messagebox.showerror(title, "提权失败，请手动以管理员身份运行本工具。", parent=parent)
+            # 非管理员路径：命令在外部 cmd 窗口执行，本进程不跟踪进度，直接恢复按钮
+            self._finish_async(title, on_done, mode, None if ok else -1, btns, cancel_btn, parent)
             return ok
 
-    def _exec_admin_thread(self, full, title):
-        """后台线程：真正执行命令，完成后通过 root.after 切回主线程更新 UI。"""
+    def _exec_admin_thread(self, full, title, on_done, mode, btns, cancel_btn, parent):
+        """后台线程：用 Popen 执行命令，轮询取消标志；完成后回主线程收尾。"""
         try:
-            r = subprocess.run(
+            proc = subprocess.Popen(
                 full, shell=True,
-                capture_output=True, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
-            out = (r.stdout or "") + (r.stderr or "")
-            self._log(f"[{title}] 返回码 {r.returncode}\n{out.strip()}")
-            self.root.after(0, self._on_admin_done, title, r.returncode, out.strip())
+            self._running_proc = proc
+            out_buf = []
+            while True:
+                if self._cancel_flag:
+                    try:
+                        proc.terminate()
+                        proc.wait(timeout=5)
+                    except Exception:
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+                    self._log(f"[{title}] 已被用户取消。")
+                    self.root.after(0, self._finish_async, title, on_done, mode,
+                                    "CANCELLED", btns, cancel_btn, parent)
+                    return
+                line = proc.stdout.readline() if proc.stdout else ""
+                if line == "" and proc.poll() is not None:
+                    break
+                if line:
+                    s = line.rstrip()
+                    if s:
+                        self._log(s)
+            self._log(f"[{title}] 返回码 {proc.returncode}")
+            self.root.after(0, self._finish_async, title, on_done, mode,
+                            proc.returncode, btns, cancel_btn, parent)
         except Exception as e:
             self._log(f"[{title}] 执行异常：{e}")
-            self.root.after(0, self._on_admin_done, title, -1, str(e))
+            self.root.after(0, self._finish_async, title, on_done, mode, -1, btns, cancel_btn, parent)
 
-    def _on_admin_done(self, title, code, out):
+    def _finish_async(self, title, on_done, mode, code, btns, cancel_btn, parent):
         self._busy = False
-        if code == 0:
-            messagebox.showinfo(title, "执行成功。")
+        self._running_proc = None
+        for b in (btns or ()):
+            try:
+                b.configure(state="normal")
+            except Exception:
+                pass
+        if cancel_btn is not None:
+            try:
+                cancel_btn.configure(state="disabled")
+            except Exception:
+                pass
+        if on_done is not None:
+            try:
+                on_done(mode, code)
+            except Exception as e:
+                self._log(f"[{title}] 回调异常：{e}")
         else:
-            messagebox.showwarning(title, f"命令返回非零：{code}\n{out}")
-        # 后台线程执行完毕：恢复“执行”按钮与状态条（loading 指示结束）
-        self._restore_opt_btn()
+            # 无自定义回调（一键优化卡片路径）：弹通用结果框 + 恢复卡片按钮
+            if code == "CANCELLED":
+                messagebox.showinfo(title, "已取消执行。", parent=parent)
+            elif code == 0:
+                messagebox.showinfo(title, "执行成功。", parent=parent)
+            elif code is None:
+                pass  # 非管理员路径已弹过提示
+            else:
+                messagebox.showwarning(title, f"命令返回非零：{code}", parent=parent)
+            self._restore_opt_btn()
+
+    def _cancel_running(self):
+        """用户点“取消”时置标志；后台线程下一轮轮询即终止进程。"""
+        if not getattr(self, "_busy", False):
+            return
+        self._cancel_flag = True
+        self._log("已请求取消，正在终止后台进程……")
 
     def opt_high_perf(self):
         self._run_admin_cmd(
@@ -3733,10 +3764,8 @@ class CleanerApp:
                 out1,
             )
             if not m:
-                self.root.after(
-                    0, self._on_admin_done, title, -1,
-                    f"未在 duplicatescheme 输出中找到 GUID。\n{out1.strip()}",
-                )
+                self._log(f"[卓越电源] 失败：未在 duplicatescheme 输出中找到 GUID。\n{out1.strip()}")
+                self.root.after(0, self._finish_async, title, None, None, -1, [], None, None)
                 return
             new_guid = m.group(0)
             self._log(f"[卓越电源] 副本 GUID：{new_guid}")
@@ -3748,10 +3777,10 @@ class CleanerApp:
             )
             out2 = (r2.stdout or "") + (r2.stderr or "")
             self._log(f"[卓越电源] 步骤2 返回码 {r2.returncode}\n{out2.strip()}")
-            self.root.after(0, self._on_admin_done, title, r2.returncode, out2.strip())
+            self.root.after(0, self._finish_async, title, None, None, r2.returncode, [], None, None)
         except Exception as e:
             self._log(f"[卓越电源] 异常：{e}")
-            self.root.after(0, self._on_admin_done, title, -1, str(e))
+            self.root.after(0, self._finish_async, title, None, None, -1, [], None, None)
 
     def opt_dns_flush(self):
         self._run_admin_cmd(
