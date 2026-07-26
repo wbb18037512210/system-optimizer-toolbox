@@ -2109,6 +2109,55 @@ class CleanerApp:
         self.log.pack(fill="both", expand=True, padx=2, pady=2)
         self.log.configure(state="disabled")
 
+    # ---- 统一深色 Treeview 样式（供所有 Duck 子窗口使用）----
+    def _style_dark_treeview(self, tree, with_checked=True, with_accent_tags=True):
+        """把 Treeview 适配为深色主题：表体+表头深色、文字浅色、选中行深绿+亮字。
+        with_checked: 是否配置 'checked' 标签（卸载预装/深度优化/电源/性能/GPU/Duck 全功能等）
+        with_accent_tags: 是否同时配置 highrisk/done/enabled/disabled/installed/gone 等状态标签。
+        """
+        s = ttk.Style()
+        # 表体
+        s.configure(
+            "Treeview",
+            background=PANEL,
+            fieldbackground=PANEL,
+            foreground=TEXT,
+            borderwidth=0,
+            rowheight=22,
+            font=("Microsoft YaHei UI", 9),
+        )
+        s.map(
+            "Treeview",
+            background=[("selected", ACCENT)],
+            foreground=[("selected", "#ffffff")],
+        )
+        # 表头
+        s.configure(
+            "Treeview.Heading",
+            background=PANEL2,
+            foreground=TEXT,
+            relief="flat",
+            font=("Microsoft YaHei UI", 9, "bold"),
+        )
+        s.map(
+            "Treeview.Heading",
+            background=[("active", PANEL2)],
+        )
+        # 标签（前景+背景都设置，避免文字与浅色背景冲突）
+        if with_checked:
+            tree.tag_configure(
+                "checked",
+                background="#1b2a22",      # 深绿（与主应用一致）
+                foreground=OK,             # 亮绿，清晰可见
+            )
+        if with_accent_tags:
+            tree.tag_configure("highrisk", background=PANEL, foreground=DANGER)
+            tree.tag_configure("disabled", background=PANEL, foreground=DANGER)
+            tree.tag_configure("done",     background=PANEL, foreground=ACCENT2)
+            tree.tag_configure("enabled",  background=PANEL, foreground=ACCENT2)
+            tree.tag_configure("installed", background=PANEL, foreground=ACCENT2)
+            tree.tag_configure("gone",     background=PANEL, foreground=SUB)
+
     def _enable_round_corners(self):
         try:
             import ctypes
@@ -2227,9 +2276,10 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        tree.tag_configure("checked", background="#e8f5e9")
-        tree.tag_configure("installed", foreground="#1565c0")
-        tree.tag_configure("gone", foreground="#999")
+        self._style_dark_treeview(tree, with_checked=True, with_accent_tags=False)
+        # 额外标签
+        tree.tag_configure("installed", background=PANEL, foreground=ACCENT2)
+        tree.tag_configure("gone", background=PANEL, foreground=SUB)
 
         self._debloat_tree = tree
         self._debloat_vars = {}
@@ -2502,9 +2552,7 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        tree.tag_configure("checked", background="#e8f5e9")
-        tree.tag_configure("highrisk", foreground="#b00020")
-        tree.tag_configure("done", foreground="#1565c0")
+        self._style_dark_treeview(tree)
 
         self._deep_tree = tree
         self._deep_vars = {}
@@ -2671,9 +2719,7 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        tree.tag_configure("checked", background="#e8f5e9")
-        tree.tag_configure("highrisk", foreground="#b00020")
-        tree.tag_configure("done", foreground="#1565c0")
+        self._style_dark_treeview(tree)
 
         self._power_tree = tree
         self._power_vars = {}
@@ -2838,9 +2884,7 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        tree.tag_configure("checked", background="#e8f5e9")
-        tree.tag_configure("highrisk", foreground="#b00020")
-        tree.tag_configure("done", foreground="#1565c0")
+        self._style_dark_treeview(tree)
 
         self._gpu_tree = tree
         self._gpu_vars = {}
@@ -3078,8 +3122,7 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        tree.tag_configure("disabled", foreground="#b00020")
-        tree.tag_configure("enabled", foreground="#1565c0")
+        self._style_dark_treeview(tree, with_checked=False)
 
         self._startup_tree = tree
         self._startup_vars = {}
@@ -3320,9 +3363,7 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        tree.tag_configure("checked", background="#e8f5e9")
-        tree.tag_configure("highrisk", foreground="#b00020")
-        tree.tag_configure("done", foreground="#1565c0")
+        self._style_dark_treeview(tree)
 
         self._optduck_tree = tree
         self._optduck_vars = {}
