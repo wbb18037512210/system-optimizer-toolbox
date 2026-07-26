@@ -1647,167 +1647,377 @@ OPTDUCK_OPTS = [
 # ----------------------------------------------------------------------------
 # 3. GUI
 # ----------------------------------------------------------------------------
+# ====== 现代深色 UI：配色 / 自绘控件 / 全新外壳 ======
+BG = "#0d1117"          # 主背景（近黑蓝）
+PANEL = "#151b24"       # 卡片 / 侧栏
+PANEL2 = "#1c2531"      # 次级面板
+BORDER = "#2a313c"      # 描边
+ACCENT = "#6366f1"      # 靛蓝（主强调）
+ACCENT2 = "#22d3ee"     # 青（次强调）
+TEXT = "#e6edf3"        # 主文字
+SUB = "#8b949e"         # 次文字
+DANGER = "#f85149"      # 危险红
+OK = "#3fb950"          # 成功绿
+FONT = ("Microsoft YaHei UI", 10)
+FONT_B = ("Microsoft YaHei UI", 10, "bold")
+FONT_T = ("Microsoft YaHei UI", 13, "bold")
+
+
+def _lighten(hexc, amt):
+    r, g, b = int(hexc[1:3], 16), int(hexc[3:5], 16), int(hexc[5:7], 16)
+    r = int(r + (255 - r) * amt); g = int(g + (255 - g) * amt); b = int(b + (255 - b) * amt)
+    return "#%02x%02x%02x" % (r, g, b)
+
+
+def _rr(c, x0, y0, x1, y1, r, **kw):
+    """在 Canvas 上画圆角矩形（用四角弧 + 两直线矩形拼合）。"""
+    c.create_arc(x0, y0, x0 + 2 * r, y0 + 2 * r, start=90, extent=90, style="pieslice", **kw)
+    c.create_arc(x1 - 2 * r, y0, x1, y0 + 2 * r, start=0, extent=90, style="pieslice", **kw)
+    c.create_arc(x1 - 2 * r, y1 - 2 * r, x1, y1, start=270, extent=90, style="pieslice", **kw)
+    c.create_arc(x0, y1 - 2 * r, x0 + 2 * r, y1, start=180, extent=90, style="pieslice", **kw)
+    c.create_rectangle(x0 + r, y0, x1 - r, y1, **kw)
+    c.create_rectangle(x0, y0 + r, x1, y1 - r, **kw)
+
+
+class GradButton(tk.Canvas):
+    """自绘圆角按钮：实心渐变（主）/ 描边（次），hover 提亮。"""
+    def __init__(self, master, text="", command=None, width=132, height=36,
+                 color=ACCENT, fg="#ffffff", outline=False, font=FONT_B, surround=PANEL):
+        super().__init__(master, width=width, height=height, bg=surround,
+                         highlightthickness=0, borderwidth=0)
+        self._cw, self._ch = width, height
+        self._text, self._cmd = text, command
+        self._color, self._fg = color, fg
+        self._outline, self._font = outline, font
+        self._hover = False
+        self.bind("<Button-1>", lambda e: self._cmd and self._cmd())
+        self.bind("<Enter>", lambda e: self._hov(True))
+        self.bind("<Leave>", lambda e: self._hov(False))
+        self._draw()
+
+    def _hov(self, v):
+        self._hover = v
+        self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        w, h = self._cw, self._ch
+        if self._outline:
+            fill = _lighten(PANEL2, 0.06) if self._hover else PANEL2
+            _rr(self, 1, 1, w - 1, h - 1, 9, fill=fill, outline=self._color, width=1.4)
+            fg = self._color
+        else:
+            fill = _lighten(self._color, 0.16) if self._hover else self._color
+            _rr(self, 1, 1, w - 1, h - 1, 9, fill=fill, outline="")
+            fg = self._fg
+        _rr(self, 1, 1, w - 1, h * 0.5, 9, fill=_lighten(fill, 0.10), outline="")
+        self.create_text(w / 2, h / 2, text=self._text, fill=fg, font=self._font, anchor="center")
+
+
+class RoundedCard(tk.Canvas):
+    """真圆角卡片容器（背景透明，圆角外即透明）；内容用 place_text/place_widget 叠放。"""
+    def __init__(self, master, w, h, fill=PANEL, border=BORDER):
+        super().__init__(master, width=w, height=h, bg=BG, highlightthickness=0, borderwidth=0)
+        self._cw, self._ch, self._fill, self._border = w, h, fill, border
+        self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        _rr(self, 1, 1, self._cw - 1, self._ch - 1, 12, fill=self._fill, outline=self._border, width=1)
+        _rr(self, 1, 1, self._cw - 1, self._ch * 0.55, 12, fill=_lighten(self._fill, 0.06), outline="")
+
+    def text(self, x, y, t, **kw):
+        kw.setdefault("anchor", "nw")
+        return self.create_text(x, y, text=t, **kw)
+
+    def widget(self, w_, x, y, anchor="nw"):
+        return self.create_window(x, y, window=w_, anchor=anchor)
+
+
 class CleanerApp:
+    NAV = [("🏠", "首页", "home"), ("🧹", "清理", "clean"),
+           ("⚡", "优化", "optimize"), ("🧰", "工具", "tools")]
+    OPTS = [
+        ("🧹", "DNS 缓存", "刷新系统 DNS 解析缓存", "opt_dns_flush"),
+        ("🔋", "高性能电源", "切换高性能电源计划", "opt_high_perf"),
+        ("🏆", "卓越电源", "启用卓越性能计划", "opt_ultimate_perf"),
+        ("⚡", "快速启动", "开启快速启动", "opt_fastboot_on"),
+        ("⚡", "禁用 SysMain", "关闭 Superfetch 服务", "opt_sysmain_off"),
+        ("📡", "关传递优化", "关闭 Windows 传递优化", "opt_dosvc_off"),
+        ("🔎", "关搜索索引", "关闭 Windows 搜索索引", "opt_search_off"),
+        ("🎨", "关透明动画", "关闭窗口透明与动画", "opt_visual_off"),
+        ("📊", "关遥测", "关闭系统遥测诊断", "opt_telemetry_off"),
+        ("💤", "关休眠", "关闭休眠(释放 hiberfil)", "opt_hibernate_off"),
+        ("🧱", "关防火墙", "关闭 Windows 防火墙", "opt_firewall_off"),
+        ("🦠", "关 Defender", "关闭 Windows Defender", "opt_defender_off"),
+        ("🔓", "关 UAC", "降低 UAC 通知级别", "opt_uac_off"),
+        ("🗑", "关系统还原", "关闭系统还原点", "opt_system_restore_off"),
+        ("⬇", "关 Win 更新", "暂停 Windows 更新", "opt_wu_off"),
+    ]
+    SYS_TOOLS = [
+        ("🎛", "控制面板", "control.exe"), ("📊", "任务管理器", "taskmgr.exe"),
+        ("🗑", "卸载程序", "appwiz.cpl"), ("🧹", "磁盘清理", "cleanmgr.exe"),
+        ("📋", "系统信息", "ms-settings:about"), ("🔧", "设备管理器", "devmgmt.msc"),
+        ("💽", "磁盘管理", "diskmgmt.msc"), ("⚙", "服务", "services.msc"),
+        ("👑", "上帝模式", None),
+    ]
+    PANEL_TOOLS = [
+        ("🧯", "卸载预装", "open_debloat"), ("🛠", "深度优化", "open_deep"),
+        ("🎮", "GPU 优化", "open_gpu"), ("⚡", "电源/性能", "open_power"),
+        ("🚀", "启动项", "open_startup"), ("🧩", "Duck 全功能", "open_optduck"),
+    ]
+    EXT_TOOLS = [
+        ("🚀", "Win10 优化", "launch_win10_optimizer"),
+        ("🌐", "360 联网助手", "launch_net_assist"),
+    ]
+
     def __init__(self, root):
         self.root = root
-        self.root.title("系统优化工具箱（管理员 · 全盘）")
-        self.root.geometry("1020x780")
-        self.root.resizable(True, True)
+        self.root.title("系统优化工具箱")
+        self.root.geometry("1180x760")
+        self.root.overrideredirect(True)
+        self.root.configure(bg=BG)
         _apply_app_icon(self.root)
 
         self.item_vars = {}
         self.item_size = {}
         self.item_count = {}
         self.cleaning = False
+        self._view = "home"
+        self._nav = {}
 
-        self._build_ui()
+        self._apply_theme()
+        self._build_shell()
+        self._enable_round_corners()
         self._refresh_admin_badge()
 
-    # ---- UI 构建 ----
-    def _build_ui(self):
-        # 顶部标题 + 管理员徽标
-        top = ttk.Frame(self.root, padding=(10, 8, 10, 3))
-        top.pack(fill="x")
-        ttk.Label(top, text="🛠 系统优化工具箱", font=("Microsoft YaHei UI", 15, "bold")).pack(side="left")
-        self.admin_badge = ttk.Label(top, text="", font=("Microsoft YaHei UI", 9, "bold"))
-        self.admin_badge.pack(side="right")
+    # ---- 全局深色 ttk 主题（弹出的子窗口也统一）----
+    def _apply_theme(self):
+        s = ttk.Style()
+        try:
+            s.theme_use("clam")
+        except Exception:
+            pass
+        s.configure(".", font=FONT, background=BG, foreground=TEXT)
+        s.configure("TFrame", background=BG)
+        s.configure("TLabel", background=BG, foreground=TEXT)
+        s.configure("TButton", background=PANEL2, foreground=TEXT, borderwidth=0, relief="flat", padding=6)
+        s.map("TButton", background=[("active", "#283142"), ("pressed", "#1b2230")])
+        s.configure("Treeview", background=PANEL, foreground=TEXT, fieldbackground=PANEL,
+                    borderwidth=0, rowheight=32)
+        s.configure("Treeview.Heading", background=PANEL2, foreground=SUB, borderwidth=0, relief="flat")
+        s.map("Treeview", background=[("selected", "#2b3350")], foreground=[("selected", TEXT)])
+        s.configure("Cleanup.Treeview", font=("Microsoft YaHei UI", 10), rowheight=32)
+        s.configure("Vertical.TScrollbar", background=PANEL2, troughcolor=BG, borderwidth=0)
+        s.configure("TNotebook", background=BG)
+        s.configure("TNotebook.Tab", background=PANEL, foreground=SUB, padding=[8, 4])
+        s.map("TNotebook.Tab", background=[("selected", PANEL2)], foreground=[("selected", TEXT)])
 
-        # 字体层级：分组标题 10pt 粗体，与标题(15pt)/正文(9pt)形成清晰层级
-        ttk.Style().configure("TLabelframe.Label", font=("Microsoft YaHei UI", 10, "bold"))
+    # ---- 外壳：背景渐变 + 标题栏 + 侧栏 + 内容 ----
+    def _build_shell(self):
+        self.bg = tk.Canvas(self.root, bg=BG, highlightthickness=0)
+        self.bg.place(x=0, y=0, relwidth=1, relheight=1)
+        self._paint_bg()
+        self.root.bind("<Configure>", lambda e: self._paint_bg())
+        self._build_titlebar()
+        self._build_sidebar()
+        self._build_content()
 
-        # ---- 主体：上下分栏 ----
-        # 上半部分 = 4 个功能区分组（横向并排，每列 weight=1 弹性宽度）
-        # 下半部分 = 清理项目列表（占满全宽，主要交互区）
-        # 底部 = 运行日志（全宽）
-        main = ttk.Frame(self.root, padding=(10, 0, 10, 6))
-        main.pack(fill="both", expand=True)
-        main.columnconfigure(0, weight=1, uniform="cols")
-        main.columnconfigure(1, weight=1, uniform="cols")
-        main.columnconfigure(2, weight=1, uniform="cols")
-        main.columnconfigure(3, weight=1, uniform="cols")
-        main.rowconfigure(0, weight=0)   # 顶部 4 分组：自然高度
-        main.rowconfigure(1, weight=1)   # 清理项目：弹性高度
-        main.rowconfigure(2, weight=0)   # 日志：自然高度
+    def _paint_bg(self):
+        self.bg.delete("all")
+        w = self.root.winfo_width() or 1180
+        h = self.root.winfo_height() or 760
+        top, bot = (16, 21, 29), (9, 12, 17)
+        for y in range(0, h, 2):
+            t = y / h
+            col = "#%02x%02x%02x" % tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3))
+            self.bg.create_line(0, y, w, y, fill=col, width=2)
+        self.bg.create_oval(w - 420, -220, w + 140, 300, fill="#15323f", outline="")  # 右上青色光晕
+        self.bg.create_oval(-180, h - 360, 320, h + 120, fill="#1d1b3a", outline="")  # 左下紫晕
 
-        # 上：4 个功能区分组横排
-        self._build_tools_top_row(main)
+    def _build_titlebar(self):
+        bar = tk.Canvas(self.root, height=42, bg=BG, highlightthickness=0)
+        bar.place(x=0, y=0, relwidth=1)
+        self._title_bar = bar
+        self.admin_badge = tk.Label(bar, text="", font=FONT_B, bg="#2b3350", fg="#ffffff")
+        self._dots = ()
+        self._paint_title()
+        self.root.bind("<Configure>", lambda e: self._paint_title(), add="+")
+        close = tk.Canvas(bar, width=14, height=14, bg=BG, highlightthickness=0)
+        close.create_oval(1, 1, 13, 13, fill=DANGER, outline="")
+        close.bind("<Button-1>", lambda e: self.root.destroy())
+        mini = tk.Canvas(bar, width=14, height=14, bg=BG, highlightthickness=0)
+        mini.create_oval(1, 1, 13, 13, fill="#e3b341", outline="")
+        mini.bind("<Button-1>", lambda e: self.root.iconify())
+        self._dots = (close, mini)
+        self._position_dots()
+        self.root.bind("<Configure>", lambda e: self._position_dots(), add="+")
+        bar.bind("<Button-1>", self._drag_start)
+        bar.bind("<B1-Motion>", self._drag_move)
 
-        # 中：清理项目（占满全宽）
-        panel = ttk.LabelFrame(main, text="可清理项目（勾选后点击“扫描”）", padding=4)
-        panel.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(6, 4))
-        panel.columnconfigure(0, weight=1)
-        self._build_cleanup_list_into(panel)
-        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
-        self._build_select_stats_into(panel)
-        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
-        self._build_action_buttons_into(panel)
+    def _paint_title(self):
+        bar = self._title_bar
+        bar.delete("all")
+        w = self.root.winfo_width() or 1180
+        A, B = (99, 102, 241), (34, 211, 238)
+        for x in range(0, w, 2):
+            t = x / w
+            col = "#%02x%02x%02x" % tuple(int(A[i] + (B[i] - A[i]) * t) for i in range(3))
+            bar.create_line(x, 0, x, 42, fill=col, width=2)
+        bar.create_text(20, 21, text="🛠  系统优化工具箱", fill="#ffffff",
+                        font=("Microsoft YaHei UI", 13, "bold"), anchor="w")
+        self.admin_badge.place(x=w - 270, y=11, height=20)
 
-        # 下：运行日志（全宽）
-        self._build_log_into(main)
+    def _position_dots(self):
+        w = self.root.winfo_width() or 1180
+        self._dots[0].place(x=w - 26, y=14)
+        self._dots[1].place(x=w - 48, y=14)
 
-    # ---- 顶部一行：4 个功能区分组横向并排 ----
-    def _build_tools_top_row(self, parent):
-        # 列 1：Windows 系统工具
-        g1 = ttk.LabelFrame(parent, text="🖥 Windows 系统工具", padding=5)
-        g1.grid(row=0, column=0, sticky="nsew", padx=(0, 3))
-        self._button_grid(g1, [
-            ("🎛 控制面板", lambda: self._open_target("control.exe")),
-            ("📊 任务管理器", lambda: self._open_target("taskmgr.exe")),
-            ("🗑 卸载程序", lambda: self._open_target("appwiz.cpl")),
-            ("🧹 磁盘清理", lambda: self._open_target("cleanmgr.exe")),
-            ("📋 系统信息", lambda: self._open_target("ms-settings:about")),
-            ("🔧 设备管理器", lambda: self._open_target("devmgmt.msc")),
-            ("💽 磁盘管理", lambda: self._open_target("diskmgmt.msc")),
-            ("⚙ 服务", lambda: self._open_target("services.msc")),
-            ("👑 上帝模式", self.open_godmode),
-        ], per_row=2, padx=4, pady_top=4, width=12)
+    def _drag_start(self, e):
+        self._dx, self._dy = e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y()
 
-        # 列 2：优化与卸载面板
-        g2 = ttk.LabelFrame(parent, text="🧩 优化与卸载面板", padding=5)
-        g2.grid(row=0, column=1, sticky="nsew", padx=3)
-        self._button_grid(g2, [
-            ("🧯 卸载预装", self.open_debloat),
-            ("🛠 深度优化", self.open_deep),
-            ("🎮 GPU 优化", self.open_gpu),
-            ("⚡ 电源/性能", self.open_power),
-            ("🚀 启动项", self.open_startup),
-            ("🧩 Duck 全功能", self.open_optduck),
-        ], per_row=2, padx=4, pady_top=4, width=12)
+    def _drag_move(self, e):
+        self.root.geometry(f"+{e.x_root - self._dx}+{e.y_root - self._dy}")
 
-        # 列 3：外部工具
-        g3 = ttk.LabelFrame(parent, text="🌐 外部工具", padding=5)
-        g3.grid(row=0, column=2, sticky="nsew", padx=3)
-        self._button_grid(g3, [
-            ("🚀 Win10 优化", self.launch_win10_optimizer),
-            ("🌐 360 联网助手", self.launch_net_assist),
-        ], per_row=1, padx=4, pady_top=4, width=18)
+    def _build_sidebar(self):
+        sb = tk.Frame(self.root, bg=PANEL, width=224)
+        sb.place(x=0, y=42, height=718)
+        tk.Canvas(sb, bg=PANEL, highlightthickness=0).create_line(223, 0, 223, 718, fill=BORDER, width=1)
+        hdr = tk.Label(sb, text="导航", bg=PANEL, fg=SUB, font=("Microsoft YaHei UI", 9, "bold"))
+        hdr.place(x=22, y=20)
+        y = 56
+        for icon, label, key in self.NAV:
+            item = tk.Frame(sb, bg=PANEL, width=196, height=42)
+            item.place(x=14, y=y)
+            ind = tk.Canvas(item, width=4, height=30, bg=PANEL, highlightthickness=0)
+            ind.place(x=0, y=6)
+            lbl = tk.Label(item, text=f"{icon}  {label}", bg=PANEL, fg=SUB, font=FONT_B)
+            lbl.place(x=18, y=11)
+            for w_ in (item, ind, lbl):
+                w_.bind("<Enter>", lambda e, it=item, lb=lbl, i=ind: self._nav_hover(it, lb, i, True))
+                w_.bind("<Leave>", lambda e, it=item, lb=lbl, i=ind: self._nav_hover(it, lb, i, False, key))
+                w_.bind("<Button-1>", lambda e, k=key: self._show(k))
+            self._nav[key] = (item, lbl, ind)
+            y += 48
+        self._nav_selected = "home"
+        self._style_nav("home")
 
-        # 列 4：一键优化（需管理员 + 高危提示上移到分组顶部）
-        g4 = ttk.LabelFrame(parent, text="⚡ 一键优化（需管理员）", padding=5)
-        g4.grid(row=0, column=3, sticky="nsew", padx=(3, 0))
-        ttk.Label(
-            g4,
-            text="⚠ 高危：二次确认，全部可逆；非管理员触发 UAC。",
-            foreground="#b00020", font=("Microsoft YaHei UI", 8, "bold"),
-            wraplength=220, justify="left",
-        ).pack(anchor="w", pady=(0, 4))
-        self._button_grid(g4, [
-            ("🧹 DNS 缓存", self.opt_dns_flush),
-            ("🔋 高性能电源", self.opt_high_perf),
-            ("🏆 卓越电源", self.opt_ultimate_perf),
-            ("⚡ 快速启动", self.opt_fastboot_on),
-            ("⚡ 禁用 SysMain", self.opt_sysmain_off),
-            ("📡 关传递优化", self.opt_dosvc_off),
-            ("🔎 关搜索索引", self.opt_search_off),
-            ("🎨 关透明动画", self.opt_visual_off),
-            ("📊 关遥测", self.opt_telemetry_off),
-            ("💤 关休眠", self.opt_hibernate_off),
-            ("🧱 关防火墙", self.opt_firewall_off),
-            ("🦠 关 Defender", self.opt_defender_off),
-            ("🔓 关 UAC", self.opt_uac_off),
-            ("🗑 关系统还原", self.opt_system_restore_off),
-            ("⬇ 关 Win 更新", self.opt_wu_off),
-        ], per_row=2, padx=2, pady_top=2, width=15)
+    def _nav_hover(self, item, lbl, ind, on, key=None):
+        if key and key == self._nav_selected:
+            return
+        item.configure(bg=_lighten(PANEL, 0.10) if on else PANEL)
+        lbl.configure(bg=_lighten(PANEL, 0.10) if on else PANEL, fg=ACCENT2 if on else SUB)
+        ind.configure(bg=ACCENT2 if on else PANEL)
 
-    # ---- 按钮网格：每排 per_row 个，竖排 ----
-    def _button_grid(self, parent, buttons, per_row=2, padx=12, pady_top=8, width=None):
-        for i in range(0, len(buttons), per_row):
-            row = ttk.Frame(parent)
-            row.pack(fill="x", pady=(pady_top, 0))
-            for label, command in buttons[i:i + per_row]:
-                btn = ttk.Button(row, text=label, command=command)
-                if width:
-                    btn.configure(width=width)
-                btn.pack(side="left", padx=padx)
+    def _style_nav(self, key):
+        for k, (item, lbl, ind) in self._nav.items():
+            if k == key:
+                item.configure(bg=_lighten(PANEL, 0.16))
+                lbl.configure(bg=_lighten(PANEL, 0.16), fg=TEXT)
+                ind.configure(bg=ACCENT)
+            else:
+                item.configure(bg=PANEL)
+                lbl.configure(bg=PANEL, fg=SUB)
+                ind.configure(bg=PANEL)
+        self._nav_selected = key
 
-    # ---- 右侧（合并面板第一部分）：可清理项目列表 ----
-    def _build_cleanup_list_into(self, parent):
-        # 紧凑样式：缩小字号与行高（Treeview 的 font 需经 Style 设置，不能直接传构造参数）
-        _ts = ttk.Style()
-        _ts.configure("Cleanup.Treeview", font=("Microsoft YaHei UI", 9), rowheight=20)
+    def _build_content(self):
+        c = tk.Frame(self.root, bg=BG)
+        c.place(x=224, y=42, width=956, height=718)
+        stack = tk.Frame(c, bg=BG)
+        stack.pack(fill="both", expand=True)
+        self.views = {}
+        for key in ("home", "clean", "optimize", "tools"):
+            f = tk.Frame(stack, bg=BG)
+            f.grid(row=0, column=0, sticky="nsew")
+            f.grid_remove()
+            self.views[key] = f
+        stack.rowconfigure(0, weight=1)
+        stack.columnconfigure(0, weight=1)
+        self._build_log_into(c)
+        self._build_home(self.views["home"])
+        self._build_clean(self.views["clean"])
+        self._build_optimize(self.views["optimize"])
+        self._build_tools(self.views["tools"])
+        self._show("home")
 
-        list_box = ttk.Frame(parent)
-        list_box.pack(fill="x")
+    def _show(self, key):
+        self._style_nav(key)
+        for k, f in self.views.items():
+            if k == key:
+                f.grid()
+                f.tkraise()
+            else:
+                f.grid_remove()
+
+    # ---- 首页 ----
+    def _build_home(self, parent):
+        hero = RoundedCard(parent, 904, 168, fill=_lighten(PANEL, 0.04))
+        hero.place(x=26, y=24)
+        hero.text(34, 34, "让系统重新呼吸", font=("Microsoft YaHei UI", 26, "bold"), fill=TEXT)
+        hero.text(34, 80, "勾选 → 扫描 → 清理，三步释放磁盘空间；一键优化与系统工具触手可及。",
+                  font=FONT, fill=SUB)
+        b = GradButton(hero, text="🧹  开始清理", width=160, height=40, command=lambda: self._show("clean"))
+        hero.widget(b, 34, 116)
+        b2 = GradButton(hero, text="⚡  一键优化", width=160, height=40, color=ACCENT2, outline=True,
+                        command=lambda: self._show("optimize"))
+        hero.widget(b2, 210, 116)
+
+        # 装饰统计卡
+        stats = [
+            ("🗂  可清理项目", f"{len(CLEAN_ITEMS)} 项", "缓存 / 垃圾 / 临时文件"),
+            ("⚡  一键优化", "15 项", "电源 / 服务 / 隐私"),
+            ("🧰  系统工具", "17 项", "面板 + 外部工具"),
+        ]
+        x = 26
+        for icon, big, sub in stats:
+            card = RoundedCard(parent, 288, 120)
+            card.place(x=x, y=212)
+            card.text(24, 22, icon, font=("Microsoft YaHei UI", 16, "bold"), fill=ACCENT2)
+            card.text(24, 52, big, font=("Microsoft YaHei UI", 20, "bold"), fill=TEXT)
+            card.text(24, 88, sub, font=FONT, fill=SUB)
+            x += 304
+
+        note = tk.Label(parent, text="⚠ 高危操作均需二次确认且全部可逆；非管理员将触发 UAC 提权。",
+                        bg=BG, fg=DANGER, font=("Microsoft YaHei UI", 9, "bold"))
+        note.place(x=26, y=352)
+
+    # ---- 清理视图 ----
+    def _build_clean(self, parent):
+        bar = tk.Frame(parent, bg=BG)
+        bar.place(x=26, y=22, width=904, height=44)
+        tk.Label(bar, text="可清理项目", bg=BG, fg=TEXT, font=("Microsoft YaHei UI", 15, "bold")).pack(side="left")
+        GradButton(bar, surround=BG, text="全选", width=86, height=32, color=PANEL2, outline=True,
+                   command=lambda: self._set_all(True)).pack(side="right", padx=4)
+        GradButton(bar, surround=BG, text="全不选", width=86, height=32, color=PANEL2, outline=True,
+                   command=lambda: self._set_all(False)).pack(side="right", padx=4)
+        GradButton(bar, surround=BG, text="仅低风险", width=86, height=32, color=PANEL2, outline=True,
+                   command=self._only_low).pack(side="right", padx=4)
+        GradButton(bar, surround=BG, text="📄 导出", width=96, height=32, color=PANEL2, outline=True,
+                   command=self._export_report).pack(side="right", padx=4)
+        GradButton(bar, surround=BG, text="🚀 清理", width=96, height=32, color=DANGER,
+                   command=self._ask_clean).pack(side="right", padx=4)
+        GradButton(bar, surround=BG, text="🔍 扫描", width=96, height=32, color=ACCENT2,
+                   command=self._scan).pack(side="right", padx=4)
+
+        list_box = tk.Frame(parent, bg=BG)
+        list_box.place(x=26, y=78, width=904, height=470)
         cols = ("check", "name", "detail", "size")
-        self.tree = ttk.Treeview(list_box, columns=cols, show="headings",
-                                 style="Cleanup.Treeview", height=12)
+        self.tree = ttk.Treeview(list_box, columns=cols, show="headings", style="Cleanup.Treeview")
         self.tree.heading("check", text="")
         self.tree.heading("name", text="项目")
         self.tree.heading("detail", text="位置")
         self.tree.heading("size", text="已占用")
-        self.tree.column("check", width=28, anchor="center", stretch=False)
-        self.tree.column("name", width=200, stretch=False)
-        self.tree.column("detail", width=400, stretch=True)
-        self.tree.column("size", width=110, anchor="e", stretch=False)
-        self.tree.grid(row=0, column=0, sticky="nsew")
+        self.tree.column("check", width=36, anchor="center", stretch=False)
+        self.tree.column("name", width=220, stretch=False)
+        self.tree.column("detail", width=470, stretch=True)
+        self.tree.column("size", width=120, anchor="e", stretch=False)
+        self.tree.pack(side="left", fill="both", expand=True)
         vsb = ttk.Scrollbar(list_box, orient="vertical", command=self.tree.yview)
-        vsb.grid(row=0, column=1, sticky="ns")
+        vsb.pack(side="right", fill="y")
         self.tree.configure(yscrollcommand=vsb.set)
-        list_box.columnconfigure(0, weight=1)
-
-        # 选中行背景改柔和薄荷绿，弱化原高饱和绿造成的“刺眼”感
-        self.tree.tag_configure("checked", background="#eef7f0")
-        self.tree.tag_configure("highrisk", foreground="#b00020")
+        self.tree.tag_configure("checked", background="#1b2a22")
+        self.tree.tag_configure("highrisk", foreground=DANGER)
         for item in CLEAN_ITEMS:
             self.item_vars[item["id"]] = tk.BooleanVar(value=item["checked"])
             self.item_size[item["id"]] = 0
@@ -1818,44 +2028,95 @@ class CleanerApp:
                 tags.append("checked")
             if item["risk"] == "高":
                 tags.append("highrisk")
-            self.tree.insert(
-                "", "end", iid=item["id"],
-                values=(mark, item["name"], _elide(item["detail"], 18), "未扫描"),
-                tags=tuple(tags)
-            )
+            self.tree.insert("", "end", iid=item["id"],
+                             values=(mark, item["name"], _elide(item["detail"], 40), "未扫描"),
+                             tags=tuple(tags))
         self.tree.bind("<Button-1>", self._on_tree_click)
 
-    # ---- 右侧（合并面板第二部分）：全选 / 统计 ----
-    def _build_select_stats_into(self, parent):
-        f = ttk.Frame(parent)
-        f.pack(fill="x")
-        sel = ttk.Frame(f)
-        sel.pack(fill="x")
-        ttk.Button(sel, text="全选", command=lambda: self._set_all(True)).pack(side="left", padx=2)
-        ttk.Button(sel, text="全不选", command=lambda: self._set_all(False)).pack(side="left", padx=2)
-        ttk.Button(sel, text="仅低风险", command=self._only_low).pack(side="left", padx=2)
         self.stat_var = tk.StringVar(value="已选占用：0 B ｜ 文件数：0")
-        ttk.Label(f, textvariable=self.stat_var,
-                  font=("Microsoft YaHei UI", 9), foreground="#0a7c2f").pack(anchor="w", pady=(4, 0))
+        tk.Label(parent, textvariable=self.stat_var, bg=BG, fg=OK, font=FONT_B).place(x=26, y=556)
 
-    # ---- 右侧（合并面板第三部分）：主操作按钮 ----
-    def _build_action_buttons_into(self, parent):
-        inner = ttk.Frame(parent)
-        inner.pack(anchor="w")
-        self.btn_scan = ttk.Button(inner, text="🔍 扫描占用", command=self._scan)
-        self.btn_scan.pack(side="left", padx=5)
-        self.btn_clean = ttk.Button(inner, text="🚀 开始清理", command=self._ask_clean)
-        self.btn_clean.pack(side="left", padx=5)
-        self.btn_export = ttk.Button(inner, text="📄 导出报告", command=self._export_report)
-        self.btn_export.pack(side="left", padx=5)
+    # ---- 优化视图（卡片网格）----
+    def _build_optimize(self, parent):
+        tk.Label(parent, text="一键优化", bg=BG, fg=TEXT, font=("Microsoft YaHei UI", 15, "bold")).place(x=26, y=20)
+        tk.Label(parent, text="⚠ 每项二次确认，全部可逆；非管理员触发 UAC。", bg=BG, fg=DANGER,
+                 font=("Microsoft YaHei UI", 9, "bold")).place(x=120, y=26)
+        row = col = 0
+        x0, y0, cw, ch, gx, gy = 26, 64, 288, 96, 16, 16
+        for icon, name, desc, meth in self.OPTS:
+            card = RoundedCard(parent, cw, ch)
+            card.place(x=x0 + col * (cw + gx), y=y0 + row * (ch + gy))
+            card.text(20, 16, f"{icon}  {name}", font=FONT_B, fill=TEXT)
+            card.text(20, 46, desc, font=("Microsoft YaHei UI", 9), fill=SUB)
+            b = GradButton(card, text="执行", width=72, height=30, color=ACCENT,
+                           command=lambda m=meth: getattr(self, m)())
+            card.widget(b, cw - 92, ch - 42)
+            col += 1
+            if col >= 3:
+                col = 0
+                row += 1
 
-    # ---- 底部：运行日志（全宽）----
+    # ---- 工具视图（可滚动卡片网格）----
+    def _build_tools(self, parent):
+        cv = tk.Canvas(parent, bg=BG, highlightthickness=0)
+        cv.pack(fill="both", expand=True)
+        sy = ttk.Scrollbar(parent, orient="vertical", command=cv.yview)
+        sy.pack(side="right", fill="y")
+        cv.configure(yscrollcommand=sy.set)
+        inner = tk.Frame(cv, bg=BG)
+        cv.create_window((0, 0), window=inner, anchor="nw")
+
+        def section(title, items, row):
+            tk.Label(inner, text=title, bg=BG, fg=ACCENT2, font=FONT_B).grid(
+                row=row, column=0, columnspan=3, sticky="w", padx=26, pady=(10, 6))
+            r, c = row + 1, 0
+            for icon, name, cmd in items:
+                card = RoundedCard(inner, 286, 80)
+                card.grid(row=r, column=c, padx=8, pady=7)
+                card.text(20, 18, f"{icon}  {name}", font=FONT_B, fill=TEXT)
+                b = GradButton(card, text="打开", width=72, height=30, color=ACCENT, outline=True,
+                               command=lambda cc=cmd: self._run_tool(cc))
+                card.widget(b, 286 - 92, 80 - 42)
+                c += 1
+                if c >= 3:
+                    c = 0
+                    r += 1
+            return r + 1
+
+        y = section("🖥 Windows 系统工具", self.SYS_TOOLS, 0)
+        y = section("🧩 优化与卸载面板", self.PANEL_TOOLS, y)
+        section("🌐 外部工具", self.EXT_TOOLS, y)
+        inner.update_idletasks()
+        cv.configure(scrollregion=cv.bbox("all"))
+
+    def _run_tool(self, cmd):
+        if cmd is None:
+            self.open_godmode()
+        elif cmd.startswith("open_") or cmd.startswith("launch_"):
+            getattr(self, cmd)()
+        else:
+            self._open_target(cmd)
+
+    # ---- 日志（内容区底部常驻）----
     def _build_log_into(self, parent):
-        log_frame = ttk.LabelFrame(parent, text="运行日志", padding=3)
-        log_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0))
-        self.log = scrolledtext.ScrolledText(log_frame, height=4, wrap="word", font=("Consolas", 9))
-        self.log.pack(fill="both", expand=True)
+        lf = tk.Frame(parent, bg=BG)
+        lf.pack(side="bottom", fill="x")
+        tk.Label(lf, text="运行日志", bg=BG, fg=SUB, font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", padx=26)
+        box = tk.Frame(lf, bg=PANEL)
+        box.pack(fill="x", padx=26, pady=(2, 8))
+        self.log = scrolledtext.ScrolledText(box, height=3, wrap="word", font=("Consolas", 9),
+                                              bg=PANEL, fg=TEXT, borderwidth=0, insertbackground=TEXT)
+        self.log.pack(fill="both", expand=True, padx=2, pady=2)
         self.log.configure(state="disabled")
+
+    def _enable_round_corners(self):
+        try:
+            import ctypes
+            hwnd = int(self.root.winfo_id())
+            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                hwnd, 33, ctypes.byref(ctypes.c_int(2)), 4)
+        except Exception:
+            pass
 
     def _open_target(self, target):
         try:
