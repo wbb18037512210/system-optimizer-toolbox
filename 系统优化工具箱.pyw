@@ -1651,7 +1651,7 @@ class CleanerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("系统优化工具箱（管理员 · 全盘）")
-        self.root.geometry("900x760")
+        self.root.geometry("820x760")
         self.root.resizable(True, True)
         _apply_app_icon(self.root)
 
@@ -1672,6 +1672,9 @@ class CleanerApp:
         self.admin_badge = ttk.Label(top, text="", font=("Microsoft YaHei UI", 9, "bold"))
         self.admin_badge.pack(side="right")
 
+        # 字体层级：分组标题 10pt 粗体，与标题(15pt)/正文(9pt)形成清晰层级
+        ttk.Style().configure("TLabelframe.Label", font=("Microsoft YaHei UI", 10, "bold"))
+
         # ---- 左右分栏主体：左 = 工具 + 一键优化，右 = 清理列表 + 日志 ----
         body = ttk.Frame(self.root)
         body.pack(fill="both", expand=True, padx=10, pady=(0, 6))
@@ -1683,19 +1686,23 @@ class CleanerApp:
         left = ttk.Frame(body)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
 
-        # 右列（行权重：列表占大头，下方操作区固定）
+        # 右列：合并为单个“可清理项目”面板（列表 + 选择统计 + 操作 一体，避免碎片盒）
         right = ttk.Frame(body)
         right.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(0, weight=0)   # 清理列表（紧凑，固定高度，不纵向拉伸）
-        right.rowconfigure(1, weight=0)   # 全选 / 统计
-        right.rowconfigure(2, weight=0)   # 主操作按钮
 
         self._build_tools_into(left)
         self._build_optimize_into(left)
-        self._build_cleanup_list_into(right)
-        self._build_select_stats_into(right)
-        self._build_action_buttons_into(right)
+
+        # 右侧单一面板：可清理列表 + 选择/统计 + 操作，用分隔线区隔，整体填满右列不空旷
+        panel = ttk.LabelFrame(right, text="可清理项目（勾选后点击“扫描”）", padding=4)
+        panel.grid(row=0, column=0, sticky="nsew", pady=(0, 3))
+        panel.columnconfigure(0, weight=1)
+        self._build_cleanup_list_into(panel)
+        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
+        self._build_select_stats_into(panel)
+        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
+        self._build_action_buttons_into(panel)
 
         # ---- 底部：运行日志（全宽）----
         self._build_log_into(self.root)
@@ -1742,6 +1749,14 @@ class CleanerApp:
         of = ttk.LabelFrame(parent, text="⚡ 一键优化（需管理员，二次确认）", padding=6)
         of.pack(fill="x")
 
+        # 高危提示上移到分组顶部，进入即见（红字加粗 + 自动换行）
+        ttk.Label(
+            of,
+            text="⚠ 高危：每项执行前二次确认，全部可逆；非管理员将触发 UAC 提权。",
+            foreground="#b00020", font=("Microsoft YaHei UI", 9, "bold"),
+            wraplength=230, justify="left",
+        ).pack(anchor="w", pady=(0, 6))
+
         self._button_grid(of, [
             ("🧹 DNS 缓存", self.opt_dns_flush),
             ("🔋 高性能电源", self.opt_high_perf),
@@ -1758,13 +1773,7 @@ class CleanerApp:
             ("🔓 关 UAC", self.opt_uac_off),
             ("🗑 关系统还原", self.opt_system_restore_off),
             ("⬇ 关 Win 更新", self.opt_wu_off),
-        ], per_row=2, padx=4, pady_top=4, width=13)
-
-        ttk.Label(
-            of,
-            text="⚠ 高危：非管理员将触发 UAC，每项执行前二次确认，全部可逆。",
-            foreground="#b00020", font=("Microsoft YaHei UI", 8),
-        ).pack(anchor="w", pady=(4, 0))
+        ], per_row=3, padx=3, pady_top=4, width=10)
 
     # ---- 按钮网格：每排 per_row 个，竖排 ----
     def _button_grid(self, parent, buttons, per_row=2, padx=12, pady_top=8, width=None):
@@ -1777,19 +1786,16 @@ class CleanerApp:
                     btn.configure(width=width)
                 btn.pack(side="left", padx=padx)
 
-    # ---- 右侧：可清理项目列表 ----
+    # ---- 右侧（合并面板第一部分）：可清理项目列表 ----
     def _build_cleanup_list_into(self, parent):
-        list_frame = ttk.LabelFrame(parent, text="可清理项目（勾选后点击“扫描”）", padding=3)
-        list_frame.grid(row=0, column=0, sticky="nsw", pady=(0, 3))
-        list_frame.rowconfigure(0, weight=0)
-        list_frame.columnconfigure(0, weight=0)
-
         # 紧凑样式：缩小字号与行高（Treeview 的 font 需经 Style 设置，不能直接传构造参数）
         _ts = ttk.Style()
         _ts.configure("Cleanup.Treeview", font=("Microsoft YaHei UI", 9), rowheight=20)
 
+        list_box = ttk.Frame(parent)
+        list_box.pack(fill="x")
         cols = ("check", "name", "detail", "size")
-        self.tree = ttk.Treeview(list_frame, columns=cols, show="headings",
+        self.tree = ttk.Treeview(list_box, columns=cols, show="headings",
                                  style="Cleanup.Treeview", height=12)
         self.tree.heading("check", text="")
         self.tree.heading("name", text="项目")
@@ -1797,15 +1803,16 @@ class CleanerApp:
         self.tree.heading("size", text="已占用")
         self.tree.column("check", width=22, anchor="center", stretch=False)
         self.tree.column("name", width=148, stretch=False)
-        self.tree.column("detail", width=180, stretch=False)
+        self.tree.column("detail", width=200, stretch=True)
         self.tree.column("size", width=78, anchor="e", stretch=False)
         self.tree.grid(row=0, column=0, sticky="nsew")
-
-        vsb = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
+        vsb = ttk.Scrollbar(list_box, orient="vertical", command=self.tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=vsb.set)
+        list_box.columnconfigure(0, weight=1)
 
-        self.tree.tag_configure("checked", background="#e8f5e9")
+        # 选中行背景改柔和薄荷绿，弱化原高饱和绿造成的“刺眼”感
+        self.tree.tag_configure("checked", background="#eef7f0")
         self.tree.tag_configure("highrisk", foreground="#b00020")
         for item in CLEAN_ITEMS:
             self.item_vars[item["id"]] = tk.BooleanVar(value=item["checked"])
@@ -1824,10 +1831,10 @@ class CleanerApp:
             )
         self.tree.bind("<Button-1>", self._on_tree_click)
 
-    # ---- 右侧：全选 / 统计（独立分组）----
+    # ---- 右侧（合并面板第二部分）：全选 / 统计 ----
     def _build_select_stats_into(self, parent):
-        f = ttk.LabelFrame(parent, text="选择 / 统计", padding=4)
-        f.grid(row=1, column=0, sticky="w", pady=(3, 0))
+        f = ttk.Frame(parent)
+        f.pack(fill="x")
         sel = ttk.Frame(f)
         sel.pack(fill="x")
         ttk.Button(sel, text="全选", command=lambda: self._set_all(True)).pack(side="left", padx=2)
@@ -1835,14 +1842,12 @@ class CleanerApp:
         ttk.Button(sel, text="仅低风险", command=self._only_low).pack(side="left", padx=2)
         self.stat_var = tk.StringVar(value="已选占用：0 B ｜ 文件数：0")
         ttk.Label(f, textvariable=self.stat_var,
-                  font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
+                  font=("Microsoft YaHei UI", 9), foreground="#0a7c2f").pack(anchor="w", pady=(4, 0))
 
-    # ---- 右侧：主操作按钮（独立分组、居中）----
+    # ---- 右侧（合并面板第三部分）：主操作按钮 ----
     def _build_action_buttons_into(self, parent):
-        f = ttk.LabelFrame(parent, text="操作", padding=4)
-        f.grid(row=2, column=0, sticky="w", pady=(3, 0))
-        inner = ttk.Frame(f)
-        inner.pack(anchor="center")
+        inner = ttk.Frame(parent)
+        inner.pack(anchor="w")
         self.btn_scan = ttk.Button(inner, text="🔍 扫描占用", command=self._scan)
         self.btn_scan.pack(side="left", padx=5)
         self.btn_clean = ttk.Button(inner, text="🚀 开始清理", command=self._ask_clean)
@@ -1854,7 +1859,7 @@ class CleanerApp:
     def _build_log_into(self, parent):
         log_frame = ttk.LabelFrame(parent, text="运行日志", padding=3)
         log_frame.pack(fill="x", padx=10, pady=(0, 6))
-        self.log = scrolledtext.ScrolledText(log_frame, height=6, wrap="word", font=("Consolas", 9))
+        self.log = scrolledtext.ScrolledText(log_frame, height=4, wrap="word", font=("Consolas", 9))
         self.log.pack(fill="both", expand=True)
         self.log.configure(state="disabled")
 
