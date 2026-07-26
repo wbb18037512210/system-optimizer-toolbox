@@ -1651,7 +1651,7 @@ class CleanerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("系统优化工具箱（管理员 · 全盘）")
-        self.root.geometry("820x760")
+        self.root.geometry("1020x780")
         self.root.resizable(True, True)
         _apply_app_icon(self.root)
 
@@ -1675,28 +1675,26 @@ class CleanerApp:
         # 字体层级：分组标题 10pt 粗体，与标题(15pt)/正文(9pt)形成清晰层级
         ttk.Style().configure("TLabelframe.Label", font=("Microsoft YaHei UI", 10, "bold"))
 
-        # ---- 左右分栏主体：左 = 工具 + 一键优化，右 = 清理列表 + 日志 ----
-        body = ttk.Frame(self.root)
-        body.pack(fill="both", expand=True, padx=10, pady=(0, 6))
-        body.columnconfigure(0, weight=0, minsize=230)
-        body.columnconfigure(1, weight=1)
-        body.rowconfigure(0, weight=1)
+        # ---- 主体：上下分栏 ----
+        # 上半部分 = 4 个功能区分组（横向并排，每列 weight=1 弹性宽度）
+        # 下半部分 = 清理项目列表（占满全宽，主要交互区）
+        # 底部 = 运行日志（全宽）
+        main = ttk.Frame(self.root, padding=(10, 0, 10, 6))
+        main.pack(fill="both", expand=True)
+        main.columnconfigure(0, weight=1, uniform="cols")
+        main.columnconfigure(1, weight=1, uniform="cols")
+        main.columnconfigure(2, weight=1, uniform="cols")
+        main.columnconfigure(3, weight=1, uniform="cols")
+        main.rowconfigure(0, weight=0)   # 顶部 4 分组：自然高度
+        main.rowconfigure(1, weight=1)   # 清理项目：弹性高度
+        main.rowconfigure(2, weight=0)   # 日志：自然高度
 
-        # 左列
-        left = ttk.Frame(body)
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        # 上：4 个功能区分组横排
+        self._build_tools_top_row(main)
 
-        # 右列：合并为单个“可清理项目”面板（列表 + 选择统计 + 操作 一体，避免碎片盒）
-        right = ttk.Frame(body)
-        right.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
-        right.columnconfigure(0, weight=1)
-
-        self._build_tools_into(left)
-        self._build_optimize_into(left)
-
-        # 右侧单一面板：可清理列表 + 选择/统计 + 操作，用分隔线区隔，整体填满右列不空旷
-        panel = ttk.LabelFrame(right, text="可清理项目（勾选后点击“扫描”）", padding=4)
-        panel.grid(row=0, column=0, sticky="nsew", pady=(0, 3))
+        # 中：清理项目（占满全宽）
+        panel = ttk.LabelFrame(main, text="可清理项目（勾选后点击“扫描”）", padding=4)
+        panel.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(6, 4))
         panel.columnconfigure(0, weight=1)
         self._build_cleanup_list_into(panel)
         ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
@@ -1704,14 +1702,14 @@ class CleanerApp:
         ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
         self._build_action_buttons_into(panel)
 
-        # ---- 底部：运行日志（全宽）----
-        self._build_log_into(self.root)
+        # 下：运行日志（全宽）
+        self._build_log_into(main)
 
-    # ---- 系统快捷工具（合并 CMD 入口 + 上帝模式）----
-    def _build_tools_into(self, parent):
-        # —— 分区 1：Windows 系统工具 ——
+    # ---- 顶部一行：4 个功能区分组横向并排 ----
+    def _build_tools_top_row(self, parent):
+        # 列 1：Windows 系统工具
         g1 = ttk.LabelFrame(parent, text="🖥 Windows 系统工具", padding=5)
-        g1.pack(fill="x", pady=(0, 4))
+        g1.grid(row=0, column=0, sticky="nsew", padx=(0, 3))
         self._button_grid(g1, [
             ("🎛 控制面板", lambda: self._open_target("control.exe")),
             ("📊 任务管理器", lambda: self._open_target("taskmgr.exe")),
@@ -1724,9 +1722,9 @@ class CleanerApp:
             ("👑 上帝模式", self.open_godmode),
         ], per_row=2, padx=4, pady_top=4, width=12)
 
-        # —— 分区 2：优化与卸载面板 ——
+        # 列 2：优化与卸载面板
         g2 = ttk.LabelFrame(parent, text="🧩 优化与卸载面板", padding=5)
-        g2.pack(fill="x", pady=(0, 4))
+        g2.grid(row=0, column=1, sticky="nsew", padx=3)
         self._button_grid(g2, [
             ("🧯 卸载预装", self.open_debloat),
             ("🛠 深度优化", self.open_deep),
@@ -1736,28 +1734,24 @@ class CleanerApp:
             ("🧩 Duck 全功能", self.open_optduck),
         ], per_row=2, padx=4, pady_top=4, width=12)
 
-        # —— 分区 3：外部工具 ——
+        # 列 3：外部工具
         g3 = ttk.LabelFrame(parent, text="🌐 外部工具", padding=5)
-        g3.pack(fill="x", pady=(0, 4))
+        g3.grid(row=0, column=2, sticky="nsew", padx=3)
         self._button_grid(g3, [
             ("🚀 Win10 优化", self.launch_win10_optimizer),
             ("🌐 360 联网助手", self.launch_net_assist),
-        ], per_row=1, padx=4, pady_top=4, width=22)
+        ], per_row=1, padx=4, pady_top=4, width=18)
 
-    # ---- 一键优化（需管理员，执行前二次确认）----
-    def _build_optimize_into(self, parent):
-        of = ttk.LabelFrame(parent, text="⚡ 一键优化（需管理员，二次确认）", padding=6)
-        of.pack(fill="x")
-
-        # 高危提示上移到分组顶部，进入即见（红字加粗 + 自动换行）
+        # 列 4：一键优化（需管理员 + 高危提示上移到分组顶部）
+        g4 = ttk.LabelFrame(parent, text="⚡ 一键优化（需管理员）", padding=5)
+        g4.grid(row=0, column=3, sticky="nsew", padx=(3, 0))
         ttk.Label(
-            of,
-            text="⚠ 高危：每项执行前二次确认，全部可逆；非管理员将触发 UAC 提权。",
-            foreground="#b00020", font=("Microsoft YaHei UI", 9, "bold"),
-            wraplength=230, justify="left",
-        ).pack(anchor="w", pady=(0, 6))
-
-        self._button_grid(of, [
+            g4,
+            text="⚠ 高危：二次确认，全部可逆；非管理员触发 UAC。",
+            foreground="#b00020", font=("Microsoft YaHei UI", 8, "bold"),
+            wraplength=220, justify="left",
+        ).pack(anchor="w", pady=(0, 4))
+        self._button_grid(g4, [
             ("🧹 DNS 缓存", self.opt_dns_flush),
             ("🔋 高性能电源", self.opt_high_perf),
             ("🏆 卓越电源", self.opt_ultimate_perf),
@@ -1773,7 +1767,7 @@ class CleanerApp:
             ("🔓 关 UAC", self.opt_uac_off),
             ("🗑 关系统还原", self.opt_system_restore_off),
             ("⬇ 关 Win 更新", self.opt_wu_off),
-        ], per_row=3, padx=3, pady_top=4, width=10)
+        ], per_row=2, padx=2, pady_top=2, width=15)
 
     # ---- 按钮网格：每排 per_row 个，竖排 ----
     def _button_grid(self, parent, buttons, per_row=2, padx=12, pady_top=8, width=None):
@@ -1801,10 +1795,10 @@ class CleanerApp:
         self.tree.heading("name", text="项目")
         self.tree.heading("detail", text="位置")
         self.tree.heading("size", text="已占用")
-        self.tree.column("check", width=22, anchor="center", stretch=False)
-        self.tree.column("name", width=148, stretch=False)
-        self.tree.column("detail", width=200, stretch=True)
-        self.tree.column("size", width=78, anchor="e", stretch=False)
+        self.tree.column("check", width=28, anchor="center", stretch=False)
+        self.tree.column("name", width=200, stretch=False)
+        self.tree.column("detail", width=400, stretch=True)
+        self.tree.column("size", width=110, anchor="e", stretch=False)
         self.tree.grid(row=0, column=0, sticky="nsew")
         vsb = ttk.Scrollbar(list_box, orient="vertical", command=self.tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
@@ -1858,7 +1852,7 @@ class CleanerApp:
     # ---- 底部：运行日志（全宽）----
     def _build_log_into(self, parent):
         log_frame = ttk.LabelFrame(parent, text="运行日志", padding=3)
-        log_frame.pack(fill="x", padx=10, pady=(0, 6))
+        log_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0))
         self.log = scrolledtext.ScrolledText(log_frame, height=4, wrap="word", font=("Consolas", 9))
         self.log.pack(fill="both", expand=True)
         self.log.configure(state="disabled")
