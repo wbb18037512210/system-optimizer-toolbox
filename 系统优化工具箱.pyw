@@ -1687,7 +1687,7 @@ class CleanerApp:
         right = ttk.Frame(body)
         right.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(0, weight=3)   # 清理列表
+        right.rowconfigure(0, weight=0)   # 清理列表（紧凑，固定高度，不纵向拉伸）
         right.rowconfigure(1, weight=0)   # 全选 / 统计
         right.rowconfigure(2, weight=0)   # 主操作按钮
 
@@ -1780,25 +1780,25 @@ class CleanerApp:
     # ---- 右侧：可清理项目列表 ----
     def _build_cleanup_list_into(self, parent):
         list_frame = ttk.LabelFrame(parent, text="可清理项目（勾选后点击“扫描”）", padding=3)
-        list_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 3))
-        list_frame.rowconfigure(0, weight=1)
-        list_frame.columnconfigure(0, weight=1)
+        list_frame.grid(row=0, column=0, sticky="nsw", pady=(0, 3))
+        list_frame.rowconfigure(0, weight=0)
+        list_frame.columnconfigure(0, weight=0)
 
         # 紧凑样式：缩小字号与行高（Treeview 的 font 需经 Style 设置，不能直接传构造参数）
         _ts = ttk.Style()
-        _ts.configure("Cleanup.Treeview", font=("Microsoft YaHei UI", 9), rowheight=22)
+        _ts.configure("Cleanup.Treeview", font=("Microsoft YaHei UI", 9), rowheight=20)
 
         cols = ("check", "name", "detail", "size")
         self.tree = ttk.Treeview(list_frame, columns=cols, show="headings",
-                                 style="Cleanup.Treeview")
+                                 style="Cleanup.Treeview", height=12)
         self.tree.heading("check", text="")
         self.tree.heading("name", text="项目")
         self.tree.heading("detail", text="位置")
         self.tree.heading("size", text="已占用")
-        self.tree.column("check", width=24, anchor="center", stretch=False)
-        self.tree.column("name", width=130, stretch=False)
-        self.tree.column("detail", width=220)
-        self.tree.column("size", width=90, anchor="e", stretch=False)
+        self.tree.column("check", width=22, anchor="center", stretch=False)
+        self.tree.column("name", width=148, stretch=False)
+        self.tree.column("detail", width=180, stretch=False)
+        self.tree.column("size", width=78, anchor="e", stretch=False)
         self.tree.grid(row=0, column=0, sticky="nsew")
 
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
@@ -1819,7 +1819,7 @@ class CleanerApp:
                 tags.append("highrisk")
             self.tree.insert(
                 "", "end", iid=item["id"],
-                values=(mark, item["name"], _elide(item["detail"]), "未扫描"),
+                values=(mark, item["name"], _elide(item["detail"], 18), "未扫描"),
                 tags=tuple(tags)
             )
         self.tree.bind("<Button-1>", self._on_tree_click)
@@ -1827,7 +1827,7 @@ class CleanerApp:
     # ---- 右侧：全选 / 统计（独立分组）----
     def _build_select_stats_into(self, parent):
         f = ttk.LabelFrame(parent, text="选择 / 统计", padding=4)
-        f.grid(row=1, column=0, sticky="ew", pady=(3, 0))
+        f.grid(row=1, column=0, sticky="w", pady=(3, 0))
         sel = ttk.Frame(f)
         sel.pack(fill="x")
         ttk.Button(sel, text="全选", command=lambda: self._set_all(True)).pack(side="left", padx=2)
@@ -1840,7 +1840,7 @@ class CleanerApp:
     # ---- 右侧：主操作按钮（独立分组、居中）----
     def _build_action_buttons_into(self, parent):
         f = ttk.LabelFrame(parent, text="操作", padding=4)
-        f.grid(row=2, column=0, sticky="ew", pady=(3, 0))
+        f.grid(row=2, column=0, sticky="w", pady=(3, 0))
         inner = ttk.Frame(f)
         inner.pack(anchor="center")
         self.btn_scan = ttk.Button(inner, text="🔍 扫描占用", command=self._scan)
