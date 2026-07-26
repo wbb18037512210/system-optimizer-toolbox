@@ -1857,9 +1857,14 @@ class CleanerApp:
         self._build_content()
 
     def _paint_bg(self):
-        self.bg.delete("all")
         w = self.root.winfo_width() or 1180
         h = self.root.winfo_height() or 760
+        # 仅在尺寸真正变化时才重绘（避免每次 <Configure>——尤其是拖动窗口时——
+        # 都重建近 400 条渐变线，导致明显的卡顿/发热）
+        if getattr(self, "_bg_wh", None) == (w, h):
+            return
+        self._bg_wh = (w, h)
+        self.bg.delete("all")
         top, bot = (16, 21, 29), (9, 12, 17)
         for y in range(0, h, 2):
             t = y / h
@@ -1890,8 +1895,11 @@ class CleanerApp:
 
     def _paint_title(self):
         bar = self._title_bar
-        bar.delete("all")
         w = self.root.winfo_width() or 1180
+        if getattr(self, "_title_w", None) == w:
+            return
+        self._title_w = w
+        bar.delete("all")
         A, B = (99, 102, 241), (34, 211, 238)
         for x in range(0, w, 2):
             t = x / w
@@ -2134,9 +2142,12 @@ class CleanerApp:
 
         # 鼠标滚轮支持（在 tools 视图内）
         def _wheel(e):
-            cv.yview_scroll(int(-1 * (e.delta / 120)), "units")
-        cv.bind("<Enter>", lambda e: cv.bind_all("<MouseWheel>", _wheel), add="+")
-        cv.bind("<Leave>", lambda e: cv.unbind_all("<MouseWheel>"), add="+")
+            # 仅在 tools 视图可见时响应，避免全局监听器堆积/误伤其他视图
+            if cv.winfo_ismapped():
+                cv.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        # 构建时只绑定一次（旧实现每次进入画布都 add="+" 绑定、离开再 unbind_all，
+        # 来回切换会累积全局 <MouseWheel> 监听器，属于事件监听器泄漏）
+        cv.bind_all("<MouseWheel>", _wheel, add="+")
 
         def section(title, items, row):
             tk.Label(inner, text=title, bg=BG, fg=ACCENT2, font=FONT_B).grid(
@@ -2164,9 +2175,18 @@ class CleanerApp:
             inner.grid_columnconfigure(col, weight=1, uniform="tools_col")
 
         def _refit(_e=None):
-            cv.itemconfig(win_id, width=cv.winfo_width())
-            inner.update_idletasks()
-            cv.configure(scrollregion=cv.bbox("all"))
+            try:
+                w = cv.winfo_width()
+            except Exception:
+                return
+            if w <= 1:
+                return
+            cv.itemconfig(win_id, width=w)
+            # 关键修复：不要在 <Configure> 回调里调用 update_idletasks()。
+            # 切换“主页→工具”时画布被显示会触发 <Configure>，若在回调中同步强制
+            # 重排 17 个卡片（且可能引发级联 Configure），主线程会被长时间占用，
+            # 表现为界面卡顿/假死。改为延迟到 idle 再计算滚动区域。
+            cv.after_idle(lambda: cv.configure(scrollregion=cv.bbox("all")))
         cv.bind("<Configure>", _refit)
         self.root.after(50, _refit)
 
