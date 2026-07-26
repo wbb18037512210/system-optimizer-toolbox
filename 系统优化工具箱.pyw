@@ -1669,6 +1669,12 @@ def _lighten(hexc, amt):
     return "#%02x%02x%02x" % (r, g, b)
 
 
+def _luma(hexc):
+    """粗略感知亮度 0-255。"""
+    r, g, b = int(hexc[1:3], 16), int(hexc[3:5], 16), int(hexc[5:7], 16)
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
 def _rr(c, x0, y0, x1, y1, r, **kw):
     """在 Canvas 上画圆角矩形（用四角弧 + 两直线矩形拼合）。"""
     c.create_arc(x0, y0, x0 + 2 * r, y0 + 2 * r, start=90, extent=90, style="pieslice", **kw)
@@ -1680,7 +1686,7 @@ def _rr(c, x0, y0, x1, y1, r, **kw):
 
 
 class GradButton(tk.Canvas):
-    """自绘圆角按钮：实心渐变（主）/ 描边（次），hover 提亮。"""
+    """自绘圆角按钮：实心渐变（主）/ 描边（次），hover 提亮，支持 disabled 灰态。"""
     def __init__(self, master, text="", command=None, width=132, height=36,
                  color=ACCENT, fg="#ffffff", outline=False, font=FONT_B, surround=PANEL):
         super().__init__(master, width=width, height=height, bg=surround,
@@ -1690,9 +1696,24 @@ class GradButton(tk.Canvas):
         self._color, self._fg = color, fg
         self._outline, self._font = outline, font
         self._hover = False
-        self.bind("<Button-1>", lambda e: self._cmd and self._cmd())
+        self._disabled = False
+        self.bind("<Button-1>", self._on_click)
         self.bind("<Enter>", lambda e: self._hov(True))
         self.bind("<Leave>", lambda e: self._hov(False))
+        self._draw()
+
+    def _on_click(self, _e=None):
+        if self._disabled:
+            return
+        if self._cmd:
+            self._cmd()
+
+    def disable(self):
+        self._disabled = True
+        self._draw()
+
+    def enable(self):
+        self._disabled = False
         self._draw()
 
     def _hov(self, v):
@@ -1702,10 +1723,18 @@ class GradButton(tk.Canvas):
     def _draw(self):
         self.delete("all")
         w, h = self._cw, self._ch
+        if self._disabled:
+            # 灰态：低饱和的实心灰
+            fill = "#2a3142"
+            fg = "#5f6a82"
+            _rr(self, 1, 1, w - 1, h - 1, 9, fill=fill, outline="")
+            self.create_text(w / 2, h / 2, text=self._text, fill=fg, font=self._font, anchor="center")
+            return
         if self._outline:
             fill = _lighten(PANEL2, 0.06) if self._hover else PANEL2
             _rr(self, 1, 1, w - 1, h - 1, 9, fill=fill, outline=self._color, width=1.4)
-            fg = self._color
+            # 描边按钮：文字提亮到浅色，避免与 PANEL2 背景同色
+            fg = _lighten(self._color, 0.70) if _luma(self._color) < 120 else self._color
         else:
             fill = _lighten(self._color, 0.16) if self._hover else self._color
             _rr(self, 1, 1, w - 1, h - 1, 9, fill=fill, outline="")
@@ -1995,10 +2024,12 @@ class CleanerApp:
                    command=self._only_low).pack(side="right", padx=4)
         GradButton(bar, surround=BG, text="📄 导出", width=96, height=32, color=PANEL2, outline=True,
                    command=self._export_report).pack(side="right", padx=4)
-        GradButton(bar, surround=BG, text="🚀 清理", width=96, height=32, color=DANGER,
-                   command=self._ask_clean).pack(side="right", padx=4)
-        GradButton(bar, surround=BG, text="🔍 扫描", width=96, height=32, color=ACCENT2,
-                   command=self._scan).pack(side="right", padx=4)
+        self.btn_clean = GradButton(bar, surround=BG, text="🚀 清理", width=96, height=32, color=DANGER,
+                                    command=self._ask_clean)
+        self.btn_clean.pack(side="right", padx=4)
+        self.btn_scan = GradButton(bar, surround=BG, text="🔍 扫描", width=96, height=32, color=ACCENT2,
+                                   command=self._scan)
+        self.btn_scan.pack(side="right", padx=4)
 
         list_box = tk.Frame(parent, bg=BG)
         list_box.place(x=26, y=78, width=904, height=470)
@@ -2059,35 +2090,50 @@ class CleanerApp:
     # ---- 工具视图（可滚动卡片网格）----
     def _build_tools(self, parent):
         cv = tk.Canvas(parent, bg=BG, highlightthickness=0)
-        cv.pack(fill="both", expand=True)
+        cv.pack(side="left", fill="both", expand=True)
         sy = ttk.Scrollbar(parent, orient="vertical", command=cv.yview)
         sy.pack(side="right", fill="y")
         cv.configure(yscrollcommand=sy.set)
         inner = tk.Frame(cv, bg=BG)
-        cv.create_window((0, 0), window=inner, anchor="nw")
+        win_id = cv.create_window((0, 0), window=inner, anchor="nw")
+
+        # 鼠标滚轮支持（在 tools 视图内）
+        def _wheel(e):
+            cv.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        cv.bind("<Enter>", lambda e: cv.bind_all("<MouseWheel>", _wheel), add="+")
+        cv.bind("<Leave>", lambda e: cv.unbind_all("<MouseWheel>"), add="+")
 
         def section(title, items, row):
             tk.Label(inner, text=title, bg=BG, fg=ACCENT2, font=FONT_B).grid(
-                row=row, column=0, columnspan=3, sticky="w", padx=26, pady=(10, 6))
+                row=row, column=0, columnspan=3, sticky="w", padx=26, pady=(8, 4))
             r, c = row + 1, 0
             for icon, name, cmd in items:
-                card = RoundedCard(inner, 286, 80)
-                card.grid(row=r, column=c, padx=8, pady=7)
-                card.text(20, 18, f"{icon}  {name}", font=FONT_B, fill=TEXT)
+                card = RoundedCard(inner, 286, 76)
+                card.grid(row=r, column=c, padx=8, pady=5)
+                card.text(20, 16, f"{icon}  {name}", font=FONT_B, fill=TEXT)
                 b = GradButton(card, text="打开", width=72, height=30, color=ACCENT, outline=True,
                                command=lambda cc=cmd: self._run_tool(cc))
-                card.widget(b, 286 - 92, 80 - 42)
+                card.widget(b, 286 - 92, 76 - 40)
                 c += 1
                 if c >= 3:
                     c = 0
                     r += 1
             return r + 1
 
-        y = section("🖥 Windows 系统工具", self.SYS_TOOLS, 0)
-        y = section("🧩 优化与卸载面板", self.PANEL_TOOLS, y)
-        section("🌐 外部工具", self.EXT_TOOLS, y)
-        inner.update_idletasks()
-        cv.configure(scrollregion=cv.bbox("all"))
+        y = section("🖥  Windows 系统工具", self.SYS_TOOLS, 0)
+        y = section("🧩  优化与卸载面板", self.PANEL_TOOLS, y)
+        y = section("🌐  外部工具", self.EXT_TOOLS, y)
+
+        # inner 列宽均匀分布
+        for col in range(3):
+            inner.grid_columnconfigure(col, weight=1, uniform="tools_col")
+
+        def _refit(_e=None):
+            cv.itemconfig(win_id, width=cv.winfo_width())
+            inner.update_idletasks()
+            cv.configure(scrollregion=cv.bbox("all"))
+        cv.bind("<Configure>", _refit)
+        self.root.after(50, _refit)
 
     def _run_tool(self, cmd):
         if cmd is None:
@@ -3883,7 +3929,7 @@ class CleanerApp:
 
     # ---- 扫描 ----
     def _scan(self):
-        self.btn_scan.configure(state="disabled")
+        self.btn_scan.disable()
         drives = "、".join(d + "盘" for d in get_fixed_drives())
         self._log(f"开始扫描已选项目的占用空间……（已探测固定硬盘：{drives}）")
 
@@ -3904,7 +3950,7 @@ class CleanerApp:
                 self._update_stat()
                 self._log(f"  {item['name']}：{human_size(sz)}（{cnt} 个文件）")
             self._log("扫描完成。请确认无误后点击“开始清理”。")
-            self.root.after(0, lambda: self.btn_scan.configure(state="normal"))
+            self.root.after(0, lambda: self.btn_scan.enable())
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -3933,8 +3979,8 @@ class CleanerApp:
 
     def _clean(self):
         self.cleaning = True
-        self.btn_scan.configure(state="disabled")
-        self.btn_clean.configure(state="disabled")
+        self.btn_scan.disable()
+        self.btn_clean.disable()
         self._log("====== 开始清理 ======")
 
         def worker():
@@ -3960,8 +4006,8 @@ class CleanerApp:
 
     def _finish_clean(self, freed, removed):
         self.cleaning = False
-        self.btn_scan.configure(state="normal")
-        self.btn_clean.configure(state="normal")
+        self.btn_scan.enable()
+        self.btn_clean.enable()
         messagebox.showinfo("完成", f"清理完成！\n共释放：{human_size(freed)}\n删除：{removed} 个文件/目录")
         self._scan()
 
