@@ -1651,7 +1651,7 @@ class CleanerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("系统优化工具箱（管理员 · 全盘）")
-        self.root.geometry("880x780")
+        self.root.geometry("900x760")
         self.root.resizable(True, True)
         _apply_app_icon(self.root)
 
@@ -1666,16 +1666,16 @@ class CleanerApp:
     # ---- UI 构建 ----
     def _build_ui(self):
         # 顶部标题 + 管理员徽标
-        top = ttk.Frame(self.root, padding=(12, 10, 12, 4))
+        top = ttk.Frame(self.root, padding=(10, 8, 10, 3))
         top.pack(fill="x")
-        ttk.Label(top, text="🛠 系统优化工具箱", font=("Microsoft YaHei UI", 16, "bold")).pack(side="left")
-        self.admin_badge = ttk.Label(top, text="", font=("Microsoft YaHei UI", 10, "bold"))
+        ttk.Label(top, text="🛠 系统优化工具箱", font=("Microsoft YaHei UI", 15, "bold")).pack(side="left")
+        self.admin_badge = ttk.Label(top, text="", font=("Microsoft YaHei UI", 9, "bold"))
         self.admin_badge.pack(side="right")
 
         # ---- 左右分栏主体：左 = 工具 + 一键优化，右 = 清理列表 + 日志 ----
         body = ttk.Frame(self.root)
-        body.pack(fill="both", expand=True, padx=12, pady=(0, 10))
-        body.columnconfigure(0, weight=0, minsize=260)
+        body.pack(fill="both", expand=True, padx=10, pady=(0, 6))
+        body.columnconfigure(0, weight=0, minsize=230)
         body.columnconfigure(1, weight=1)
         body.rowconfigure(0, weight=1)
 
@@ -1702,13 +1702,10 @@ class CleanerApp:
 
     # ---- 系统快捷工具（合并 CMD 入口 + 上帝模式）----
     def _build_tools_into(self, parent):
-        tf = ttk.LabelFrame(parent, text="系统快捷工具", padding=8)
-        tf.pack(fill="x", pady=(0, 6))
-
-        ttk.Label(tf, text="以下按钮直接调用 Windows 自带工具：",
-                  font=("Microsoft YaHei UI", 9)).pack(anchor="w")
-
-        self._button_grid(tf, [
+        # —— 分区 1：Windows 系统工具 ——
+        g1 = ttk.LabelFrame(parent, text="🖥 Windows 系统工具", padding=5)
+        g1.pack(fill="x", pady=(0, 4))
+        self._button_grid(g1, [
             ("🎛 控制面板", lambda: self._open_target("control.exe")),
             ("📊 任务管理器", lambda: self._open_target("taskmgr.exe")),
             ("🗑 卸载程序", lambda: self._open_target("appwiz.cpl")),
@@ -1718,44 +1715,56 @@ class CleanerApp:
             ("💽 磁盘管理", lambda: self._open_target("diskmgmt.msc")),
             ("⚙ 服务", lambda: self._open_target("services.msc")),
             ("👑 上帝模式", self.open_godmode),
-            ("🧯 卸载预装应用", self.open_debloat),
+        ], per_row=2, padx=4, pady_top=4, width=12)
+
+        # —— 分区 2：优化与卸载面板 ——
+        g2 = ttk.LabelFrame(parent, text="🧩 优化与卸载面板", padding=5)
+        g2.pack(fill="x", pady=(0, 4))
+        self._button_grid(g2, [
+            ("🧯 卸载预装", self.open_debloat),
             ("🛠 深度优化", self.open_deep),
             ("🎮 GPU 优化", self.open_gpu),
             ("⚡ 电源/性能", self.open_power),
-            ("🚀 启动项管理", self.open_startup),
-            ("🧩 optimizerDuck 全功能", self.open_optduck),
+            ("🚀 启动项", self.open_startup),
+            ("🧩 Duck 全功能", self.open_optduck),
+        ], per_row=2, padx=4, pady_top=4, width=12)
+
+        # —— 分区 3：外部工具 ——
+        g3 = ttk.LabelFrame(parent, text="🌐 外部工具", padding=5)
+        g3.pack(fill="x", pady=(0, 4))
+        self._button_grid(g3, [
             ("🚀 Win10 优化", self.launch_win10_optimizer),
             ("🌐 360 联网助手", self.launch_net_assist),
-        ], width=18)
+        ], per_row=1, padx=4, pady_top=4, width=22)
 
     # ---- 一键优化（需管理员，执行前二次确认）----
     def _build_optimize_into(self, parent):
-        of = ttk.LabelFrame(parent, text="一键优化（需管理员，执行前会二次确认）", padding=8)
+        of = ttk.LabelFrame(parent, text="⚡ 一键优化（需管理员，二次确认）", padding=6)
         of.pack(fill="x")
 
         self._button_grid(of, [
-            ("🧹 清理 DNS 缓存", self.opt_dns_flush),
+            ("🧹 DNS 缓存", self.opt_dns_flush),
             ("🔋 高性能电源", self.opt_high_perf),
             ("🏆 卓越电源", self.opt_ultimate_perf),
             ("⚡ 快速启动", self.opt_fastboot_on),
             ("⚡ 禁用 SysMain", self.opt_sysmain_off),
-            ("📡 关闭传递优化", self.opt_dosvc_off),
-            ("🔎 关闭搜索索引", self.opt_search_off),
-            ("🎨 关闭透明动画", self.opt_visual_off),
-            ("📊 关闭遥测", self.opt_telemetry_off),
-            ("💤 关闭休眠", self.opt_hibernate_off),
-            ("🧱 关闭防火墙", self.opt_firewall_off),
-            ("🦠 关闭 Defender", self.opt_defender_off),
-            ("🔓 关闭 UAC", self.opt_uac_off),
-            ("🗑 关闭系统还原", self.opt_system_restore_off),
-            ("⬇ 关闭 Win 更新", self.opt_wu_off),
-        ], width=18)
+            ("📡 关传递优化", self.opt_dosvc_off),
+            ("🔎 关搜索索引", self.opt_search_off),
+            ("🎨 关透明动画", self.opt_visual_off),
+            ("📊 关遥测", self.opt_telemetry_off),
+            ("💤 关休眠", self.opt_hibernate_off),
+            ("🧱 关防火墙", self.opt_firewall_off),
+            ("🦠 关 Defender", self.opt_defender_off),
+            ("🔓 关 UAC", self.opt_uac_off),
+            ("🗑 关系统还原", self.opt_system_restore_off),
+            ("⬇ 关 Win 更新", self.opt_wu_off),
+        ], per_row=2, padx=4, pady_top=4, width=13)
 
         ttk.Label(
             of,
-            text="⚠ 高危操作：非管理员将触发 UAC 提权，每项执行前二次确认，全部可逆。",
+            text="⚠ 高危：非管理员将触发 UAC，每项执行前二次确认，全部可逆。",
             foreground="#b00020", font=("Microsoft YaHei UI", 8),
-        ).pack(anchor="w", pady=(6, 0))
+        ).pack(anchor="w", pady=(4, 0))
 
     # ---- 按钮网格：每排 per_row 个，竖排 ----
     def _button_grid(self, parent, buttons, per_row=2, padx=12, pady_top=8, width=None):
@@ -1770,21 +1779,26 @@ class CleanerApp:
 
     # ---- 右侧：可清理项目列表 ----
     def _build_cleanup_list_into(self, parent):
-        list_frame = ttk.LabelFrame(parent, text="可清理项目（勾选后点击“扫描”查看占用）", padding=4)
-        list_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 4))
+        list_frame = ttk.LabelFrame(parent, text="可清理项目（勾选后点击“扫描”）", padding=3)
+        list_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 3))
         list_frame.rowconfigure(0, weight=1)
         list_frame.columnconfigure(0, weight=1)
 
+        # 紧凑样式：缩小字号与行高（Treeview 的 font 需经 Style 设置，不能直接传构造参数）
+        _ts = ttk.Style()
+        _ts.configure("Cleanup.Treeview", font=("Microsoft YaHei UI", 9), rowheight=22)
+
         cols = ("check", "name", "detail", "size")
-        self.tree = ttk.Treeview(list_frame, columns=cols, show="headings")
+        self.tree = ttk.Treeview(list_frame, columns=cols, show="headings",
+                                 style="Cleanup.Treeview")
         self.tree.heading("check", text="")
         self.tree.heading("name", text="项目")
         self.tree.heading("detail", text="位置")
         self.tree.heading("size", text="已占用")
-        self.tree.column("check", width=30, anchor="center")
-        self.tree.column("name", width=160)
-        self.tree.column("detail", width=250)
-        self.tree.column("size", width=110, anchor="e")
+        self.tree.column("check", width=24, anchor="center", stretch=False)
+        self.tree.column("name", width=130, stretch=False)
+        self.tree.column("detail", width=220)
+        self.tree.column("size", width=90, anchor="e", stretch=False)
         self.tree.grid(row=0, column=0, sticky="nsew")
 
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
@@ -1812,8 +1826,8 @@ class CleanerApp:
 
     # ---- 右侧：全选 / 统计（独立分组）----
     def _build_select_stats_into(self, parent):
-        f = ttk.LabelFrame(parent, text="选择 / 统计", padding=6)
-        f.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        f = ttk.LabelFrame(parent, text="选择 / 统计", padding=4)
+        f.grid(row=1, column=0, sticky="ew", pady=(3, 0))
         sel = ttk.Frame(f)
         sel.pack(fill="x")
         ttk.Button(sel, text="全选", command=lambda: self._set_all(True)).pack(side="left", padx=2)
@@ -1821,26 +1835,26 @@ class CleanerApp:
         ttk.Button(sel, text="仅低风险", command=self._only_low).pack(side="left", padx=2)
         self.stat_var = tk.StringVar(value="已选占用：0 B ｜ 文件数：0")
         ttk.Label(f, textvariable=self.stat_var,
-                  font=("Microsoft YaHei UI", 10, "bold")).pack(anchor="w", pady=(6, 0))
+                  font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", pady=(4, 0))
 
     # ---- 右侧：主操作按钮（独立分组、居中）----
     def _build_action_buttons_into(self, parent):
-        f = ttk.LabelFrame(parent, text="操作", padding=6)
-        f.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        f = ttk.LabelFrame(parent, text="操作", padding=4)
+        f.grid(row=2, column=0, sticky="ew", pady=(3, 0))
         inner = ttk.Frame(f)
         inner.pack(anchor="center")
         self.btn_scan = ttk.Button(inner, text="🔍 扫描占用", command=self._scan)
-        self.btn_scan.pack(side="left", padx=6)
+        self.btn_scan.pack(side="left", padx=5)
         self.btn_clean = ttk.Button(inner, text="🚀 开始清理", command=self._ask_clean)
-        self.btn_clean.pack(side="left", padx=6)
+        self.btn_clean.pack(side="left", padx=5)
         self.btn_export = ttk.Button(inner, text="📄 导出报告", command=self._export_report)
-        self.btn_export.pack(side="left", padx=6)
+        self.btn_export.pack(side="left", padx=5)
 
     # ---- 底部：运行日志（全宽）----
     def _build_log_into(self, parent):
-        log_frame = ttk.LabelFrame(parent, text="运行日志", padding=4)
-        log_frame.pack(fill="x", padx=12, pady=(0, 10))
-        self.log = scrolledtext.ScrolledText(log_frame, height=8, wrap="word", font=("Consolas", 9))
+        log_frame = ttk.LabelFrame(parent, text="运行日志", padding=3)
+        log_frame.pack(fill="x", padx=10, pady=(0, 6))
+        self.log = scrolledtext.ScrolledText(log_frame, height=6, wrap="word", font=("Consolas", 9))
         self.log.pack(fill="both", expand=True)
         self.log.configure(state="disabled")
 
