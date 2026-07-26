@@ -2182,12 +2182,20 @@ class CleanerApp:
             if w <= 1:
                 return
             cv.itemconfig(win_id, width=w)
-            # 关键修复：不要在 <Configure> 回调里调用 update_idletasks()。
-            # 切换“主页→工具”时画布被显示会触发 <Configure>，若在回调中同步强制
-            # 重排 17 个卡片（且可能引发级联 Configure），主线程会被长时间占用，
-            # 表现为界面卡顿/假死。改为延迟到 idle 再计算滚动区域。
-            cv.after_idle(lambda: cv.configure(scrollregion=cv.bbox("all")))
+            def _sync():
+                # 在 idle 回调里强制布局（而不是在 <Configure> 里同步调用
+                # update_idletasks——那样会在几何更新关键路径上重排 17 个卡片，
+                # 引发级联 Configure 和明显卡顿）。这样既保证 bbox 反映真实尺寸、
+                # cards 实际渲染，又不阻塞主线程。
+                inner.update_idletasks()
+                try:
+                    cv.configure(scrollregion=cv.bbox("all"))
+                except tk.TclError:
+                    pass
+            cv.after_idle(_sync)
         cv.bind("<Configure>", _refit)
+        # 首次显示（map）时强制一次 refit，避免 <Configure> 时机问题导致内容空白
+        cv.bind("<Map>", lambda e: cv.after(20, _refit), add="+")
         self.root.after(50, _refit)
 
     def _run_tool(self, cmd):
