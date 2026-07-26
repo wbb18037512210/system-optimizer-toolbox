@@ -4019,10 +4019,23 @@ class CleanerApp:
         self.stat_var.set(f"已选占用：{human_size(total)} ｜ 文件数：{count}")
 
     def _log(self, msg):
-        self.log.configure(state="normal")
-        self.log.insert("end", msg + "\n")
-        self.log.see("end")
-        self.log.configure(state="disabled")
+        # tkinter（Tcl 解释器）不是线程安全的。后台线程（扫描 / 清理 / 优化执行器 /
+        # 卓越电源 / 卸载预装 / GPU 检测）若直接操作 ScrolledText，会在主线程事件循环
+        # 与子线程之间竞争 Tcl 解释器锁，导致后台运行时界面整体卡死（死锁）。
+        # 因此非主线程的调用一律转发到主线程执行。
+        if threading.current_thread() is not threading.main_thread():
+            try:
+                self.root.after(0, self._log, msg)
+            except Exception:
+                pass
+            return
+        try:
+            self.log.configure(state="normal")
+            self.log.insert("end", msg + "\n")
+            self.log.see("end")
+            self.log.configure(state="disabled")
+        except Exception:
+            pass
 
     # ---- 扫描 ----
     def _scan(self):
@@ -4031,6 +4044,9 @@ class CleanerApp:
         self._log(f"开始扫描已选项目的占用空间……（已探测固定硬盘：{drives}）")
 
         def worker():
+            # 重活（遍历磁盘计算占用）在后台线程做；UI 更新必须回到主线程，
+            # 否则直接调用 tree.item / _update_stat 会与主线程事件循环竞争 Tcl
+            # 解释器锁，导致后台扫描时界面卡死。
             for item in CLEAN_ITEMS:
                 if not self.item_vars[item["id"]].get():
                     continue
@@ -4041,15 +4057,24 @@ class CleanerApp:
                     self._log(f"  [跳过] {item['name']} 扫描出错：{e}")
                 self.item_size[item["id"]] = sz
                 self.item_count[item["id"]] = cnt
-                vals = list(self.tree.item(item["id"], "values"))
-                vals[3] = f"{human_size(sz)} ({cnt})"
-                self.tree.item(item["id"], values=vals)
-                self._update_stat()
-                self._log(f"  {item['name']}：{human_size(sz)}（{cnt} 个文件）")
-            self._log("扫描完成。请确认无误后点击“开始清理”。")
-            self.root.after(0, lambda: self.btn_scan.enable())
+                self.root.after(0, self._scan_update_row, item, sz, cnt)
+            self.root.after(0, self._scan_done)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _scan_update_row(self, item, sz, cnt):
+        try:
+            vals = list(self.tree.item(item["id"], "values"))
+            vals[3] = f"{human_size(sz)} ({cnt})"
+            self.tree.item(item["id"], values=vals)
+            self._update_stat()
+        except Exception:
+            pass
+        self._log(f"  {item['name']}：{human_size(sz)}（{cnt} 个文件）")
+
+    def _scan_done(self):
+        self._log("扫描完成。请确认无误后点击“开始清理”。")
+        self.btn_scan.enable()
 
     # ---- 清理 ----
     def _ask_clean(self):
