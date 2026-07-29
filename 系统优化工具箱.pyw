@@ -618,6 +618,18 @@ CLEAN_ITEMS = [
     },
 ]
 
+# BleachBit 6.0.2 中适用于 Windows 的文件/目录清理项（共 ~147 项，从
+# `D:\360极速浏览器X下载\bleachbit-6.0.2.zip` 的 CleanerML 配置派生，
+# 仅抽取 command=delete/shred 的文件动作；注册表/SQLite/ini 等非文件动作
+# 与本框架不兼容已省略。BleachBit 原始版权 (C) 2008-2025 Andrew Ziem,
+# GPL-3.0-or-later。原始配置在本程序同目录 bleachbit_cleaners.py。）
+try:
+    from bleachbit_cleaners import BLEACHBIT_CLEAN_ITEMS
+    CLEAN_ITEMS.extend(BLEACHBIT_CLEAN_ITEMS)
+except Exception as _bb_err:
+    BLEACHBIT_CLEAN_ITEMS = []
+    print("[bleachbit] 加载失败，已跳过：", _bb_err)
+
 # 按风险排序（高 → 中 → 低）：高风险项显示在列表最上方且默认不勾选，
 # 中/低风险项默认全部勾选。
 _RISK_RANK = {"高": 0, "中": 1, "低": 2}
@@ -1647,420 +1659,167 @@ OPTDUCK_OPTS = [
 # ----------------------------------------------------------------------------
 # 3. GUI
 # ----------------------------------------------------------------------------
-# ====== 现代深色 UI：配色 / 自绘控件 / 全新外壳 ======
-BG = "#0d1117"          # 主背景（近黑蓝）
-PANEL = "#151b24"       # 卡片 / 侧栏
-PANEL2 = "#1c2531"      # 次级面板
-BORDER = "#2a313c"      # 描边
-ACCENT = "#6366f1"      # 靛蓝（主强调）
-ACCENT2 = "#22d3ee"     # 青（次强调）
-TEXT = "#e6edf3"        # 主文字
-SUB = "#8b949e"         # 次文字
-DANGER = "#f85149"      # 危险红
-OK = "#3fb950"          # 成功绿
-FONT = ("Microsoft YaHei UI", 10)
-FONT_B = ("Microsoft YaHei UI", 10, "bold")
-FONT_T = ("Microsoft YaHei UI", 13, "bold")
-
-
-def _lighten(hexc, amt):
-    r, g, b = int(hexc[1:3], 16), int(hexc[3:5], 16), int(hexc[5:7], 16)
-    r = int(r + (255 - r) * amt); g = int(g + (255 - g) * amt); b = int(b + (255 - b) * amt)
-    return "#%02x%02x%02x" % (r, g, b)
-
-
-def _luma(hexc):
-    """粗略感知亮度 0-255。"""
-    r, g, b = int(hexc[1:3], 16), int(hexc[3:5], 16), int(hexc[5:7], 16)
-    return 0.299 * r + 0.587 * g + 0.114 * b
-
-
-def _rr(c, x0, y0, x1, y1, r, **kw):
-    """在 Canvas 上画圆角矩形（用四角弧 + 两直线矩形拼合）。"""
-    c.create_arc(x0, y0, x0 + 2 * r, y0 + 2 * r, start=90, extent=90, style="pieslice", **kw)
-    c.create_arc(x1 - 2 * r, y0, x1, y0 + 2 * r, start=0, extent=90, style="pieslice", **kw)
-    c.create_arc(x1 - 2 * r, y1 - 2 * r, x1, y1, start=270, extent=90, style="pieslice", **kw)
-    c.create_arc(x0, y1 - 2 * r, x0 + 2 * r, y1, start=180, extent=90, style="pieslice", **kw)
-    c.create_rectangle(x0 + r, y0, x1 - r, y1, **kw)
-    c.create_rectangle(x0, y0 + r, x1, y1 - r, **kw)
-
-
-class GradButton(tk.Canvas):
-    """自绘圆角按钮：实心渐变（主）/ 描边（次），hover 提亮，支持 disabled 灰态。"""
-    def __init__(self, master, text="", command=None, width=132, height=36,
-                 color=ACCENT, fg="#ffffff", outline=False, font=FONT_B, surround=PANEL):
-        super().__init__(master, width=width, height=height, bg=surround,
-                         highlightthickness=0, borderwidth=0)
-        self._cw, self._ch = width, height
-        self._text, self._cmd = text, command
-        self._color, self._fg = color, fg
-        self._outline, self._font = outline, font
-        self._hover = False
-        self._disabled = False
-        self.bind("<Button-1>", self._on_click)
-        self.bind("<Enter>", lambda e: self._hov(True))
-        self.bind("<Leave>", lambda e: self._hov(False))
-        self._draw()
-
-    def _on_click(self, _e=None):
-        if self._disabled:
-            return
-        if self._cmd:
-            self._cmd()
-
-    def disable(self):
-        self._disabled = True
-        self._draw()
-
-    def enable(self):
-        self._disabled = False
-        self._draw()
-
-    def _set_text(self, t):
-        self._text = t
-        self._draw()
-
-    def _hov(self, v):
-        self._hover = v
-        self._draw()
-
-    def _draw(self):
-        self.delete("all")
-        w, h = self._cw, self._ch
-        if self._disabled:
-            # 灰态：低饱和的实心灰
-            fill = "#2a3142"
-            fg = "#5f6a82"
-            _rr(self, 1, 1, w - 1, h - 1, 9, fill=fill, outline="")
-            self.create_text(w / 2, h / 2, text=self._text, fill=fg, font=self._font, anchor="center")
-            return
-        if self._outline:
-            fill = _lighten(PANEL2, 0.06) if self._hover else PANEL2
-            _rr(self, 1, 1, w - 1, h - 1, 9, fill=fill, outline=self._color, width=1.4)
-            # 描边按钮：文字提亮到浅色，避免与 PANEL2 背景同色
-            fg = _lighten(self._color, 0.70) if _luma(self._color) < 120 else self._color
-        else:
-            fill = _lighten(self._color, 0.16) if self._hover else self._color
-            _rr(self, 1, 1, w - 1, h - 1, 9, fill=fill, outline="")
-            fg = self._fg
-        _rr(self, 1, 1, w - 1, h * 0.5, 9, fill=_lighten(fill, 0.10), outline="")
-        self.create_text(w / 2, h / 2, text=self._text, fill=fg, font=self._font, anchor="center")
-
-
-class RoundedCard(tk.Canvas):
-    """真圆角卡片容器（背景透明，圆角外即透明）；内容用 place_text/place_widget 叠放。"""
-    def __init__(self, master, w, h, fill=PANEL, border=BORDER):
-        super().__init__(master, width=w, height=h, bg=BG, highlightthickness=0, borderwidth=0)
-        self._cw, self._ch, self._fill, self._border = w, h, fill, border
-        self._draw()
-
-    def _draw(self):
-        self.delete("all")
-        _rr(self, 1, 1, self._cw - 1, self._ch - 1, 12, fill=self._fill, outline=self._border, width=1)
-        _rr(self, 1, 1, self._cw - 1, self._ch * 0.55, 12, fill=_lighten(self._fill, 0.06), outline="")
-
-    def text(self, x, y, t, **kw):
-        kw.setdefault("anchor", "nw")
-        return self.create_text(x, y, text=t, **kw)
-
-    def widget(self, w_, x, y, anchor="nw"):
-        return self.create_window(x, y, window=w_, anchor=anchor)
-
-
 class CleanerApp:
-    NAV = [("🏠", "首页", "home"), ("🧹", "清理", "clean"),
-           ("⚡", "优化", "optimize"), ("🧰", "工具", "tools")]
-    OPTS = [
-        ("🧹", "DNS 缓存", "刷新系统 DNS 解析缓存", "opt_dns_flush"),
-        ("🔋", "高性能电源", "切换高性能电源计划", "opt_high_perf"),
-        ("🏆", "卓越电源", "启用卓越性能计划", "opt_ultimate_perf"),
-        ("⚡", "快速启动", "开启快速启动", "opt_fastboot_on"),
-        ("⚡", "禁用 SysMain", "关闭 Superfetch 服务", "opt_sysmain_off"),
-        ("📡", "关传递优化", "关闭 Windows 传递优化", "opt_dosvc_off"),
-        ("🔎", "关搜索索引", "关闭 Windows 搜索索引", "opt_search_off"),
-        ("🎨", "关透明动画", "关闭窗口透明与动画", "opt_visual_off"),
-        ("📊", "关遥测", "关闭系统遥测诊断", "opt_telemetry_off"),
-        ("💤", "关休眠", "关闭休眠(释放 hiberfil)", "opt_hibernate_off"),
-        ("🧱", "关防火墙", "关闭 Windows 防火墙", "opt_firewall_off"),
-        ("🦠", "关 Defender", "关闭 Windows Defender", "opt_defender_off"),
-        ("🔓", "关 UAC", "降低 UAC 通知级别", "opt_uac_off"),
-        ("🗑", "关系统还原", "关闭系统还原点", "opt_system_restore_off"),
-        ("⬇", "关 Win 更新", "暂停 Windows 更新", "opt_wu_off"),
-    ]
-    SYS_TOOLS = [
-        ("🎛", "控制面板", "control.exe"), ("📊", "任务管理器", "taskmgr.exe"),
-        ("🗑", "卸载程序", "appwiz.cpl"), ("🧹", "磁盘清理", "cleanmgr.exe"),
-        ("📋", "系统信息", "ms-settings:about"), ("🔧", "设备管理器", "devmgmt.msc"),
-        ("💽", "磁盘管理", "diskmgmt.msc"), ("⚙", "服务", "services.msc"),
-        ("👑", "上帝模式", None),
-    ]
-    PANEL_TOOLS = [
-        ("🧯", "卸载预装", "open_debloat"), ("🛠", "深度优化", "open_deep"),
-        ("🎮", "GPU 优化", "open_gpu"), ("⚡", "电源/性能", "open_power"),
-        ("🚀", "启动项", "open_startup"), ("🧩", "Duck 全功能", "open_optduck"),
-    ]
-    EXT_TOOLS = [
-        ("🚀", "Win10 优化", "launch_win10_optimizer"),
-        ("🌐", "360 联网助手", "launch_net_assist"),
-    ]
-
     def __init__(self, root):
         self.root = root
-        self.root.title("系统优化工具箱")
-        self.root.geometry("1180x760")
-        self.root.overrideredirect(True)
-        self.root.configure(bg=BG)
+        self.root.title("系统优化工具箱（管理员 · 全盘）")
+        self.root.geometry("1020x780")
+        self.root.resizable(True, True)
         _apply_app_icon(self.root)
 
         self.item_vars = {}
         self.item_size = {}
         self.item_count = {}
         self.cleaning = False
-        self._view = "home"
-        self._nav = {}
 
-        self._apply_theme()
-        self._build_shell()
-        self._enable_round_corners()
+        self._build_ui()
         self._refresh_admin_badge()
 
-    # ---- 全局深色 ttk 主题（弹出的子窗口也统一）----
-    def _apply_theme(self):
-        s = ttk.Style()
-        try:
-            s.theme_use("clam")
-        except Exception:
-            pass
-        s.configure(".", font=FONT, background=BG, foreground=TEXT)
-        s.configure("TFrame", background=BG)
-        s.configure("TLabel", background=BG, foreground=TEXT)
-        s.configure("TButton", background=PANEL2, foreground=TEXT, borderwidth=0, relief="flat", padding=6)
-        s.map("TButton", background=[("active", "#283142"), ("pressed", "#1b2230")])
-        s.configure("Treeview", background=PANEL, foreground=TEXT, fieldbackground=PANEL,
-                    borderwidth=0, rowheight=32)
-        s.configure("Treeview.Heading", background=PANEL2, foreground=SUB, borderwidth=0, relief="flat")
-        s.map("Treeview", background=[("selected", "#2b3350")], foreground=[("selected", TEXT)])
-        s.configure("Cleanup.Treeview", font=("Microsoft YaHei UI", 10), rowheight=32)
-        s.configure("Vertical.TScrollbar", background=PANEL2, troughcolor=BG, borderwidth=0)
-        s.configure("TNotebook", background=BG)
-        s.configure("TNotebook.Tab", background=PANEL, foreground=SUB, padding=[8, 4])
-        s.map("TNotebook.Tab", background=[("selected", PANEL2)], foreground=[("selected", TEXT)])
+    # ---- UI 构建 ----
+    def _build_ui(self):
+        # 顶部标题 + 管理员徽标
+        top = ttk.Frame(self.root, padding=(10, 8, 10, 3))
+        top.pack(fill="x")
+        ttk.Label(top, text="🛠 系统优化工具箱", font=("Microsoft YaHei UI", 15, "bold")).pack(side="left")
+        self.admin_badge = ttk.Label(top, text="", font=("Microsoft YaHei UI", 9, "bold"))
+        self.admin_badge.pack(side="right")
 
-    # ---- 外壳：背景渐变 + 标题栏 + 侧栏 + 内容 ----
-    def _build_shell(self):
-        self.bg = tk.Canvas(self.root, bg=BG, highlightthickness=0)
-        self.bg.place(x=0, y=0, relwidth=1, relheight=1)
-        self._paint_bg()
-        self.root.bind("<Configure>", lambda e: self._paint_bg())
-        self._build_titlebar()
-        self._build_sidebar()
-        self._build_content()
+        # 字体层级：分组标题 10pt 粗体，与标题(15pt)/正文(9pt)形成清晰层级
+        ttk.Style().configure("TLabelframe.Label", font=("Microsoft YaHei UI", 10, "bold"))
 
-    def _paint_bg(self):
-        w = self.root.winfo_width() or 1180
-        h = self.root.winfo_height() or 760
-        # 仅在尺寸真正变化时才重绘（避免每次 <Configure>——尤其是拖动窗口时——
-        # 都重建近 400 条渐变线，导致明显的卡顿/发热）
-        if getattr(self, "_bg_wh", None) == (w, h):
-            return
-        self._bg_wh = (w, h)
-        self.bg.delete("all")
-        top, bot = (16, 21, 29), (9, 12, 17)
-        for y in range(0, h, 2):
-            t = y / h
-            col = "#%02x%02x%02x" % tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3))
-            self.bg.create_line(0, y, w, y, fill=col, width=2)
-        self.bg.create_oval(w - 420, -220, w + 140, 300, fill="#15323f", outline="")  # 右上青色光晕
-        self.bg.create_oval(-180, h - 360, 320, h + 120, fill="#1d1b3a", outline="")  # 左下紫晕
+        # ---- 主体：上下分栏 ----
+        # 上半部分 = 4 个功能区分组（横向并排，每列 weight=1 弹性宽度）
+        # 下半部分 = 清理项目列表（占满全宽，主要交互区）
+        # 底部 = 运行日志（全宽）
+        main = ttk.Frame(self.root, padding=(10, 0, 10, 6))
+        main.pack(fill="both", expand=True)
+        main.columnconfigure(0, weight=1, uniform="cols")
+        main.columnconfigure(1, weight=1, uniform="cols")
+        main.columnconfigure(2, weight=1, uniform="cols")
+        main.columnconfigure(3, weight=1, uniform="cols")
+        main.rowconfigure(0, weight=0)   # 顶部 4 分组：自然高度
+        main.rowconfigure(1, weight=1)   # 清理项目：弹性高度
+        main.rowconfigure(2, weight=0)   # 日志：自然高度
 
-    def _build_titlebar(self):
-        bar = tk.Canvas(self.root, height=42, bg=BG, highlightthickness=0)
-        bar.place(x=0, y=0, relwidth=1)
-        self._title_bar = bar
-        self.admin_badge = tk.Label(bar, text="", font=FONT_B, bg="#2b3350", fg="#ffffff")
-        self._dots = ()
-        self._paint_title()
-        self.root.bind("<Configure>", lambda e: self._paint_title(), add="+")
-        close = tk.Canvas(bar, width=14, height=14, bg=BG, highlightthickness=0)
-        close.create_oval(1, 1, 13, 13, fill=DANGER, outline="")
-        close.bind("<Button-1>", lambda e: self.root.destroy())
-        mini = tk.Canvas(bar, width=14, height=14, bg=BG, highlightthickness=0)
-        mini.create_oval(1, 1, 13, 13, fill="#e3b341", outline="")
-        mini.bind("<Button-1>", lambda e: self.root.iconify())
-        self._dots = (close, mini)
-        self._position_dots()
-        self.root.bind("<Configure>", lambda e: self._position_dots(), add="+")
-        bar.bind("<Button-1>", self._drag_start)
-        bar.bind("<B1-Motion>", self._drag_move)
+        # 上：4 个功能区分组横排
+        self._build_tools_top_row(main)
 
-    def _paint_title(self):
-        bar = self._title_bar
-        w = self.root.winfo_width() or 1180
-        if getattr(self, "_title_w", None) == w:
-            return
-        self._title_w = w
-        bar.delete("all")
-        A, B = (99, 102, 241), (34, 211, 238)
-        for x in range(0, w, 2):
-            t = x / w
-            col = "#%02x%02x%02x" % tuple(int(A[i] + (B[i] - A[i]) * t) for i in range(3))
-            bar.create_line(x, 0, x, 42, fill=col, width=2)
-        bar.create_text(20, 21, text="🛠  系统优化工具箱", fill="#ffffff",
-                        font=("Microsoft YaHei UI", 13, "bold"), anchor="w")
-        self.admin_badge.place(x=w - 270, y=11, height=20)
+        # 中：清理项目（占满全宽）
+        panel = ttk.LabelFrame(main, text="可清理项目（勾选后点击“扫描”）", padding=4)
+        panel.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(6, 4))
+        panel.columnconfigure(0, weight=1)
+        self._build_cleanup_list_into(panel)
+        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
+        self._build_select_stats_into(panel)
+        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
+        self._build_action_buttons_into(panel)
 
-    def _position_dots(self):
-        w = self.root.winfo_width() or 1180
-        self._dots[0].place(x=w - 26, y=14)
-        self._dots[1].place(x=w - 48, y=14)
+        # 下：运行日志（全宽）
+        self._build_log_into(main)
 
-    def _drag_start(self, e):
-        self._dx, self._dy = e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y()
+    # ---- 顶部一行：4 个功能区分组横向并排 ----
+    def _build_tools_top_row(self, parent):
+        # 列 1：Windows 系统工具
+        g1 = ttk.LabelFrame(parent, text="🖥 Windows 系统工具", padding=5)
+        g1.grid(row=0, column=0, sticky="nsew", padx=(0, 3))
+        self._button_grid(g1, [
+            ("🎛 控制面板", lambda: self._open_target("control.exe")),
+            ("📊 任务管理器", lambda: self._open_target("taskmgr.exe")),
+            ("🗑 卸载程序", lambda: self._open_target("appwiz.cpl")),
+            ("🧹 磁盘清理", lambda: self._open_target("cleanmgr.exe")),
+            ("📋 系统信息", lambda: self._open_target("ms-settings:about")),
+            ("🔧 设备管理器", lambda: self._open_target("devmgmt.msc")),
+            ("💽 磁盘管理", lambda: self._open_target("diskmgmt.msc")),
+            ("⚙ 服务", lambda: self._open_target("services.msc")),
+            ("👑 上帝模式", self.open_godmode),
+        ], per_row=2, padx=4, pady_top=4, width=12)
 
-    def _drag_move(self, e):
-        self.root.geometry(f"+{e.x_root - self._dx}+{e.y_root - self._dy}")
+        # 列 2：优化与卸载面板
+        g2 = ttk.LabelFrame(parent, text="🧩 优化与卸载面板", padding=5)
+        g2.grid(row=0, column=1, sticky="nsew", padx=3)
+        self._button_grid(g2, [
+            ("🧯 卸载预装", self.open_debloat),
+            ("🛠 深度优化", self.open_deep),
+            ("🎮 GPU 优化", self.open_gpu),
+            ("⚡ 电源/性能", self.open_power),
+            ("🚀 启动项", self.open_startup),
+            ("🧩 Duck 全功能", self.open_optduck),
+        ], per_row=2, padx=4, pady_top=4, width=12)
 
-    def _build_sidebar(self):
-        sb = tk.Frame(self.root, bg=PANEL, width=224)
-        sb.place(x=0, y=42, height=718)
-        tk.Canvas(sb, bg=PANEL, highlightthickness=0).create_line(223, 0, 223, 718, fill=BORDER, width=1)
-        hdr = tk.Label(sb, text="导航", bg=PANEL, fg=SUB, font=("Microsoft YaHei UI", 9, "bold"))
-        hdr.place(x=22, y=20)
-        y = 56
-        for icon, label, key in self.NAV:
-            item = tk.Frame(sb, bg=PANEL, width=196, height=42)
-            item.place(x=14, y=y)
-            ind = tk.Canvas(item, width=4, height=30, bg=PANEL, highlightthickness=0)
-            ind.place(x=0, y=6)
-            lbl = tk.Label(item, text=f"{icon}  {label}", bg=PANEL, fg=SUB, font=FONT_B)
-            lbl.place(x=18, y=11)
-            for w_ in (item, ind, lbl):
-                w_.bind("<Enter>", lambda e, it=item, lb=lbl, i=ind: self._nav_hover(it, lb, i, True))
-                w_.bind("<Leave>", lambda e, it=item, lb=lbl, i=ind: self._nav_hover(it, lb, i, False, key))
-                w_.bind("<Button-1>", lambda e, k=key: self._show(k))
-            self._nav[key] = (item, lbl, ind)
-            y += 48
-        self._nav_selected = "home"
-        self._style_nav("home")
+        # 列 3：外部工具
+        g3 = ttk.LabelFrame(parent, text="🌐 外部工具", padding=5)
+        g3.grid(row=0, column=2, sticky="nsew", padx=3)
+        self._button_grid(g3, [
+            ("🚀 Win10 优化", self.launch_win10_optimizer),
+            ("🌐 360 联网助手", self.launch_net_assist),
+        ], per_row=1, padx=4, pady_top=4, width=18)
 
-    def _nav_hover(self, item, lbl, ind, on, key=None):
-        if key and key == self._nav_selected:
-            return
-        item.configure(bg=_lighten(PANEL, 0.10) if on else PANEL)
-        lbl.configure(bg=_lighten(PANEL, 0.10) if on else PANEL, fg=ACCENT2 if on else SUB)
-        ind.configure(bg=ACCENT2 if on else PANEL)
+        # 列 4：一键优化（需管理员 + 高危提示上移到分组顶部）
+        g4 = ttk.LabelFrame(parent, text="⚡ 一键优化（需管理员）", padding=5)
+        g4.grid(row=0, column=3, sticky="nsew", padx=(3, 0))
+        ttk.Label(
+            g4,
+            text="⚠ 高危：二次确认，全部可逆；非管理员触发 UAC。",
+            foreground="#b00020", font=("Microsoft YaHei UI", 8, "bold"),
+            wraplength=220, justify="left",
+        ).pack(anchor="w", pady=(0, 4))
+        self._button_grid(g4, [
+            ("🧹 DNS 缓存", self.opt_dns_flush),
+            ("🔋 高性能电源", self.opt_high_perf),
+            ("🏆 卓越电源", self.opt_ultimate_perf),
+            ("⚡ 快速启动", self.opt_fastboot_on),
+            ("⚡ 禁用 SysMain", self.opt_sysmain_off),
+            ("📡 关传递优化", self.opt_dosvc_off),
+            ("🔎 关搜索索引", self.opt_search_off),
+            ("🎨 关透明动画", self.opt_visual_off),
+            ("📊 关遥测", self.opt_telemetry_off),
+            ("💤 关休眠", self.opt_hibernate_off),
+            ("🧱 关防火墙", self.opt_firewall_off),
+            ("🦠 关 Defender", self.opt_defender_off),
+            ("🔓 关 UAC", self.opt_uac_off),
+            ("🗑 关系统还原", self.opt_system_restore_off),
+            ("⬇ 关 Win 更新", self.opt_wu_off),
+        ], per_row=2, padx=2, pady_top=2, width=15)
 
-    def _style_nav(self, key):
-        for k, (item, lbl, ind) in self._nav.items():
-            if k == key:
-                item.configure(bg=_lighten(PANEL, 0.16))
-                lbl.configure(bg=_lighten(PANEL, 0.16), fg=TEXT)
-                ind.configure(bg=ACCENT)
-            else:
-                item.configure(bg=PANEL)
-                lbl.configure(bg=PANEL, fg=SUB)
-                ind.configure(bg=PANEL)
-        self._nav_selected = key
+    # ---- 按钮网格：每排 per_row 个，竖排 ----
+    def _button_grid(self, parent, buttons, per_row=2, padx=12, pady_top=8, width=None):
+        for i in range(0, len(buttons), per_row):
+            row = ttk.Frame(parent)
+            row.pack(fill="x", pady=(pady_top, 0))
+            for label, command in buttons[i:i + per_row]:
+                btn = ttk.Button(row, text=label, command=command)
+                if width:
+                    btn.configure(width=width)
+                btn.pack(side="left", padx=padx)
 
-    def _build_content(self):
-        c = tk.Frame(self.root, bg=BG)
-        c.place(x=224, y=42, width=956, height=718)
-        stack = tk.Frame(c, bg=BG)
-        stack.pack(fill="both", expand=True)
-        self.views = {}
-        for key in ("home", "clean", "optimize", "tools"):
-            f = tk.Frame(stack, bg=BG)
-            f.grid(row=0, column=0, sticky="nsew")
-            f.grid_remove()
-            self.views[key] = f
-        stack.rowconfigure(0, weight=1)
-        stack.columnconfigure(0, weight=1)
-        self._build_log_into(c)
-        self._build_home(self.views["home"])
-        self._build_clean(self.views["clean"])
-        self._build_optimize(self.views["optimize"])
-        self._build_tools(self.views["tools"])
-        self._show("home")
+    # ---- 右侧（合并面板第一部分）：可清理项目列表 ----
+    def _build_cleanup_list_into(self, parent):
+        # 紧凑样式：缩小字号与行高（Treeview 的 font 需经 Style 设置，不能直接传构造参数）
+        _ts = ttk.Style()
+        _ts.configure("Cleanup.Treeview", font=("Microsoft YaHei UI", 9), rowheight=20)
 
-    def _show(self, key):
-        self._style_nav(key)
-        for k, f in self.views.items():
-            if k == key:
-                f.grid()
-                f.tkraise()
-            else:
-                f.grid_remove()
-
-    # ---- 首页 ----
-    def _build_home(self, parent):
-        hero = RoundedCard(parent, 904, 168, fill=_lighten(PANEL, 0.04))
-        hero.place(x=26, y=24)
-        hero.text(34, 34, "让系统重新呼吸", font=("Microsoft YaHei UI", 26, "bold"), fill=TEXT)
-        hero.text(34, 80, "勾选 → 扫描 → 清理，三步释放磁盘空间；一键优化与系统工具触手可及。",
-                  font=FONT, fill=SUB)
-        b = GradButton(hero, text="🧹  开始清理", width=160, height=40, command=lambda: self._show("clean"))
-        hero.widget(b, 34, 116)
-        b2 = GradButton(hero, text="⚡  一键优化", width=160, height=40, color=ACCENT2, outline=True,
-                        command=lambda: self._show("optimize"))
-        hero.widget(b2, 210, 116)
-
-        # 装饰统计卡
-        stats = [
-            ("🗂  可清理项目", f"{len(CLEAN_ITEMS)} 项", "缓存 / 垃圾 / 临时文件"),
-            ("⚡  一键优化", "15 项", "电源 / 服务 / 隐私"),
-            ("🧰  系统工具", "17 项", "面板 + 外部工具"),
-        ]
-        x = 26
-        for icon, big, sub in stats:
-            card = RoundedCard(parent, 288, 120)
-            card.place(x=x, y=212)
-            card.text(24, 22, icon, font=("Microsoft YaHei UI", 16, "bold"), fill=ACCENT2)
-            card.text(24, 52, big, font=("Microsoft YaHei UI", 20, "bold"), fill=TEXT)
-            card.text(24, 88, sub, font=FONT, fill=SUB)
-            x += 304
-
-        note = tk.Label(parent, text="⚠ 高危操作均需二次确认且全部可逆；非管理员将触发 UAC 提权。",
-                        bg=BG, fg=DANGER, font=("Microsoft YaHei UI", 9, "bold"))
-        note.place(x=26, y=352)
-
-    # ---- 清理视图 ----
-    def _build_clean(self, parent):
-        bar = tk.Frame(parent, bg=BG)
-        bar.place(x=26, y=22, width=904, height=44)
-        tk.Label(bar, text="可清理项目", bg=BG, fg=TEXT, font=("Microsoft YaHei UI", 15, "bold")).pack(side="left")
-        GradButton(bar, surround=BG, text="全选", width=86, height=32, color=PANEL2, outline=True,
-                   command=lambda: self._set_all(True)).pack(side="right", padx=4)
-        GradButton(bar, surround=BG, text="全不选", width=86, height=32, color=PANEL2, outline=True,
-                   command=lambda: self._set_all(False)).pack(side="right", padx=4)
-        GradButton(bar, surround=BG, text="仅低风险", width=86, height=32, color=PANEL2, outline=True,
-                   command=self._only_low).pack(side="right", padx=4)
-        GradButton(bar, surround=BG, text="📄 导出", width=96, height=32, color=PANEL2, outline=True,
-                   command=self._export_report).pack(side="right", padx=4)
-        self.btn_clean = GradButton(bar, surround=BG, text="🚀 清理", width=96, height=32, color=DANGER,
-                                    command=self._ask_clean)
-        self.btn_clean.pack(side="right", padx=4)
-        self.btn_scan = GradButton(bar, surround=BG, text="🔍 扫描", width=96, height=32, color=ACCENT2,
-                                   command=self._scan)
-        self.btn_scan.pack(side="right", padx=4)
-
-        list_box = tk.Frame(parent, bg=BG)
-        list_box.place(x=26, y=78, width=904, height=470)
+        list_box = ttk.Frame(parent)
+        list_box.pack(fill="x")
         cols = ("check", "name", "detail", "size")
-        self.tree = ttk.Treeview(list_box, columns=cols, show="headings", style="Cleanup.Treeview")
+        self.tree = ttk.Treeview(list_box, columns=cols, show="headings",
+                                 style="Cleanup.Treeview", height=12)
         self.tree.heading("check", text="")
         self.tree.heading("name", text="项目")
         self.tree.heading("detail", text="位置")
         self.tree.heading("size", text="已占用")
-        self.tree.column("check", width=36, anchor="center", stretch=False)
-        self.tree.column("name", width=220, stretch=False)
-        self.tree.column("detail", width=470, stretch=True)
-        self.tree.column("size", width=120, anchor="e", stretch=False)
-        self.tree.pack(side="left", fill="both", expand=True)
+        self.tree.column("check", width=28, anchor="center", stretch=False)
+        self.tree.column("name", width=200, stretch=False)
+        self.tree.column("detail", width=400, stretch=True)
+        self.tree.column("size", width=110, anchor="e", stretch=False)
+        self.tree.grid(row=0, column=0, sticky="nsew")
         vsb = ttk.Scrollbar(list_box, orient="vertical", command=self.tree.yview)
-        vsb.pack(side="right", fill="y")
+        vsb.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=vsb.set)
-        self.tree.tag_configure("checked", background="#1b2a22")
-        self.tree.tag_configure("highrisk", foreground=DANGER)
+        list_box.columnconfigure(0, weight=1)
+
+        # 选中行背景改柔和薄荷绿，弱化原高饱和绿造成的“刺眼”感
+        self.tree.tag_configure("checked", background="#eef7f0")
+        self.tree.tag_configure("highrisk", foreground="#b00020")
         for item in CLEAN_ITEMS:
             self.item_vars[item["id"]] = tk.BooleanVar(value=item["checked"])
             self.item_size[item["id"]] = 0
@@ -2071,210 +1830,44 @@ class CleanerApp:
                 tags.append("checked")
             if item["risk"] == "高":
                 tags.append("highrisk")
-            self.tree.insert("", "end", iid=item["id"],
-                             values=(mark, item["name"], _elide(item["detail"], 40), "未扫描"),
-                             tags=tuple(tags))
+            self.tree.insert(
+                "", "end", iid=item["id"],
+                values=(mark, item["name"], _elide(item["detail"], 18), "未扫描"),
+                tags=tuple(tags)
+            )
         self.tree.bind("<Button-1>", self._on_tree_click)
 
+    # ---- 右侧（合并面板第二部分）：全选 / 统计 ----
+    def _build_select_stats_into(self, parent):
+        f = ttk.Frame(parent)
+        f.pack(fill="x")
+        sel = ttk.Frame(f)
+        sel.pack(fill="x")
+        ttk.Button(sel, text="全选", command=lambda: self._set_all(True)).pack(side="left", padx=2)
+        ttk.Button(sel, text="全不选", command=lambda: self._set_all(False)).pack(side="left", padx=2)
+        ttk.Button(sel, text="仅低风险", command=self._only_low).pack(side="left", padx=2)
         self.stat_var = tk.StringVar(value="已选占用：0 B ｜ 文件数：0")
-        tk.Label(parent, textvariable=self.stat_var, bg=BG, fg=OK, font=FONT_B).place(x=26, y=556)
+        ttk.Label(f, textvariable=self.stat_var,
+                  font=("Microsoft YaHei UI", 9), foreground="#0a7c2f").pack(anchor="w", pady=(4, 0))
 
-    # ---- 优化视图（卡片网格）----
-    def _build_optimize(self, parent):
-        tk.Label(parent, text="一键优化", bg=BG, fg=TEXT, font=("Microsoft YaHei UI", 15, "bold")).place(x=26, y=20)
-        tk.Label(parent, text="⚠ 每项二次确认，全部可逆；非管理员触发 UAC。", bg=BG, fg=DANGER,
-                 font=("Microsoft YaHei UI", 9, "bold")).place(x=120, y=26)
-        # 加载状态指示：执行期间显示"正在执行…"，避免界面看起来像卡死
-        self.opt_status = tk.StringVar(value="")
-        tk.Label(parent, textvariable=self.opt_status, bg=BG, fg=ACCENT2,
-                 font=("Microsoft YaHei UI", 10, "bold")).place(x=26, y=44)
-        row = col = 0
-        x0, y0, cw, ch, gx, gy = 26, 64, 288, 96, 16, 16
-        for icon, name, desc, meth in self.OPTS:
-            card = RoundedCard(parent, cw, ch)
-            card.place(x=x0 + col * (cw + gx), y=y0 + row * (ch + gy))
-            card.text(20, 16, f"{icon}  {name}", font=FONT_B, fill=TEXT)
-            card.text(20, 46, desc, font=("Microsoft YaHei UI", 9), fill=SUB)
-            # 先创建按钮，再绑定回调；默认参数固定当前按钮，避免循环闭包串到最后一项
-            b = GradButton(card, text="执行", width=72, height=30, color=ACCENT, command=None)
-            b._cmd = lambda m=meth, btn=b: self._opt_execute(m, btn)
-            card.widget(b, cw - 92, ch - 42)
-            col += 1
-            if col >= 3:
-                col = 0
-                row += 1
+    # ---- 右侧（合并面板第三部分）：主操作按钮 ----
+    def _build_action_buttons_into(self, parent):
+        inner = ttk.Frame(parent)
+        inner.pack(anchor="w")
+        self.btn_scan = ttk.Button(inner, text="🔍 扫描占用", command=self._scan)
+        self.btn_scan.pack(side="left", padx=5)
+        self.btn_clean = ttk.Button(inner, text="🚀 开始清理", command=self._ask_clean)
+        self.btn_clean.pack(side="left", padx=5)
+        self.btn_export = ttk.Button(inner, text="📄 导出报告", command=self._export_report)
+        self.btn_export.pack(side="left", padx=5)
 
-    def _opt_execute(self, meth, btn):
-        """包装优化项执行：点击后立即给出加载状态（按钮灰态+“执行中…”），
-        命令在后台线程跑，UI 全程可响应；完成后由 _restore_opt_btn 恢复。"""
-        if getattr(self, "_busy", False):
-            return
-        btn.disable()
-        btn._set_text("执行中…")
-        self._opt_btn = btn
-        self.opt_status.set("⏳ 正在执行优化任务，界面可正常操作，请稍候…")
-        try:
-            getattr(self, meth)()
-        except Exception as e:
-            self._log(f"[优化] {meth} 调用异常：{e}")
-            self._restore_opt_btn()
-
-    def _restore_opt_btn(self):
-        btn = getattr(self, "_opt_btn", None)
-        if btn is not None:
-            try:
-                btn.enable()
-                btn._set_text("执行")
-            except Exception:
-                pass
-            self._opt_btn = None
-        self.opt_status.set("")
-
-    # ---- 工具视图（可滚动卡片网格）----
-    def _build_tools(self, parent):
-        cv = tk.Canvas(parent, bg=BG, highlightthickness=0)
-        cv.pack(side="left", fill="both", expand=True)
-        sy = ttk.Scrollbar(parent, orient="vertical", command=cv.yview)
-        sy.pack(side="right", fill="y")
-        cv.configure(yscrollcommand=sy.set)
-        inner = tk.Frame(cv, bg=BG)
-        win_id = cv.create_window((0, 0), window=inner, anchor="nw")
-
-        # 鼠标滚轮支持（在 tools 视图内）
-        def _wheel(e):
-            # 仅在 tools 视图可见时响应，避免全局监听器堆积/误伤其他视图
-            if cv.winfo_ismapped():
-                cv.yview_scroll(int(-1 * (e.delta / 120)), "units")
-        # 构建时只绑定一次（旧实现每次进入画布都 add="+" 绑定、离开再 unbind_all，
-        # 来回切换会累积全局 <MouseWheel> 监听器，属于事件监听器泄漏）
-        cv.bind_all("<MouseWheel>", _wheel, add="+")
-
-        def section(title, items, row):
-            tk.Label(inner, text=title, bg=BG, fg=ACCENT2, font=FONT_B).grid(
-                row=row, column=0, columnspan=3, sticky="w", padx=26, pady=(8, 4))
-            r, c = row + 1, 0
-            for icon, name, cmd in items:
-                card = RoundedCard(inner, 286, 76)
-                card.grid(row=r, column=c, padx=8, pady=5)
-                card.text(20, 16, f"{icon}  {name}", font=FONT_B, fill=TEXT)
-                b = GradButton(card, text="打开", width=72, height=30, color=ACCENT, outline=True,
-                               command=lambda cc=cmd: self._run_tool(cc))
-                card.widget(b, 286 - 92, 76 - 40)
-                c += 1
-                if c >= 3:
-                    c = 0
-                    r += 1
-            return r + 1
-
-        y = section("🖥  Windows 系统工具", self.SYS_TOOLS, 0)
-        y = section("🧩  优化与卸载面板", self.PANEL_TOOLS, y)
-        y = section("🌐  外部工具", self.EXT_TOOLS, y)
-
-        # inner 列宽均匀分布
-        for col in range(3):
-            inner.grid_columnconfigure(col, weight=1, uniform="tools_col")
-
-        def _refit(_e=None):
-            try:
-                w = cv.winfo_width()
-            except Exception:
-                return
-            if w <= 1:
-                return
-            cv.itemconfig(win_id, width=w)
-            def _sync():
-                # 在 idle 回调里强制布局（而不是在 <Configure> 里同步调用
-                # update_idletasks——那样会在几何更新关键路径上重排 17 个卡片，
-                # 引发级联 Configure 和明显卡顿）。这样既保证 bbox 反映真实尺寸、
-                # cards 实际渲染，又不阻塞主线程。
-                inner.update_idletasks()
-                try:
-                    cv.configure(scrollregion=cv.bbox("all"))
-                except tk.TclError:
-                    pass
-            cv.after_idle(_sync)
-        cv.bind("<Configure>", _refit)
-        # 首次显示（map）时强制一次 refit，避免 <Configure> 时机问题导致内容空白
-        cv.bind("<Map>", lambda e: cv.after(20, _refit), add="+")
-        self.root.after(50, _refit)
-
-    def _run_tool(self, cmd):
-        if cmd is None:
-            self.open_godmode()
-        elif cmd.startswith("open_") or cmd.startswith("launch_"):
-            getattr(self, cmd)()
-        else:
-            self._open_target(cmd)
-
-    # ---- 日志（内容区底部常驻）----
+    # ---- 底部：运行日志（全宽）----
     def _build_log_into(self, parent):
-        lf = tk.Frame(parent, bg=BG)
-        lf.pack(side="bottom", fill="x")
-        tk.Label(lf, text="运行日志", bg=BG, fg=SUB, font=("Microsoft YaHei UI", 9, "bold")).pack(anchor="w", padx=26)
-        box = tk.Frame(lf, bg=PANEL)
-        box.pack(fill="x", padx=26, pady=(2, 8))
-        self.log = scrolledtext.ScrolledText(box, height=3, wrap="word", font=("Consolas", 9),
-                                              bg=PANEL, fg=TEXT, borderwidth=0, insertbackground=TEXT)
-        self.log.pack(fill="both", expand=True, padx=2, pady=2)
+        log_frame = ttk.LabelFrame(parent, text="运行日志", padding=3)
+        log_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        self.log = scrolledtext.ScrolledText(log_frame, height=4, wrap="word", font=("Consolas", 9))
+        self.log.pack(fill="both", expand=True)
         self.log.configure(state="disabled")
-
-    # ---- 统一深色 Treeview 样式（供所有 Duck 子窗口使用）----
-    def _style_dark_treeview(self, tree, with_checked=True, with_accent_tags=True):
-        """把 Treeview 适配为深色主题：表体+表头深色、文字浅色、选中行深绿+亮字。
-        with_checked: 是否配置 'checked' 标签（卸载预装/深度优化/电源/性能/GPU/Duck 全功能等）
-        with_accent_tags: 是否同时配置 highrisk/done/enabled/disabled/installed/gone 等状态标签。
-        """
-        s = ttk.Style()
-        # 表体
-        s.configure(
-            "Treeview",
-            background=PANEL,
-            fieldbackground=PANEL,
-            foreground=TEXT,
-            borderwidth=0,
-            rowheight=22,
-            font=("Microsoft YaHei UI", 9),
-        )
-        s.map(
-            "Treeview",
-            background=[("selected", ACCENT)],
-            foreground=[("selected", "#ffffff")],
-        )
-        # 表头
-        s.configure(
-            "Treeview.Heading",
-            background=PANEL2,
-            foreground=TEXT,
-            relief="flat",
-            font=("Microsoft YaHei UI", 9, "bold"),
-        )
-        s.map(
-            "Treeview.Heading",
-            background=[("active", PANEL2)],
-        )
-        # 标签（前景+背景都设置，避免文字与浅色背景冲突）
-        if with_checked:
-            tree.tag_configure(
-                "checked",
-                background="#1b2a22",      # 深绿（与主应用一致）
-                foreground=OK,             # 亮绿，清晰可见
-            )
-        if with_accent_tags:
-            tree.tag_configure("highrisk", background=PANEL, foreground=DANGER)
-            tree.tag_configure("disabled", background=PANEL, foreground=DANGER)
-            tree.tag_configure("done",     background=PANEL, foreground=ACCENT2)
-            tree.tag_configure("enabled",  background=PANEL, foreground=ACCENT2)
-            tree.tag_configure("installed", background=PANEL, foreground=ACCENT2)
-            tree.tag_configure("gone",     background=PANEL, foreground=SUB)
-
-    def _enable_round_corners(self):
-        try:
-            import ctypes
-            hwnd = int(self.root.winfo_id())
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd, 33, ctypes.byref(ctypes.c_int(2)), 4)
-        except Exception:
-            pass
 
     def _open_target(self, target):
         try:
@@ -2385,10 +1978,9 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        self._style_dark_treeview(tree, with_checked=True, with_accent_tags=False)
-        # 额外标签
-        tree.tag_configure("installed", background=PANEL, foreground=ACCENT2)
-        tree.tag_configure("gone", background=PANEL, foreground=SUB)
+        tree.tag_configure("checked", background="#e8f5e9")
+        tree.tag_configure("installed", foreground="#1565c0")
+        tree.tag_configure("gone", foreground="#999")
 
         self._debloat_tree = tree
         self._debloat_vars = {}
@@ -2413,9 +2005,6 @@ class CleanerApp:
         self._debloat_uninstall_btn = ttk.Button(
             bar, text="🗑 卸载选中", command=self._debloat_uninstall)
         self._debloat_uninstall_btn.pack(side="right", padx=2)
-        self._debloat_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
-                                              command=self._cancel_running)
-        self._debloat_cancel_btn.pack(side="right", padx=2)
 
         self._debloat_status = tk.StringVar(
             value="提示：先点“检测已安装”，未安装的项无需卸载。")
@@ -2542,21 +2131,13 @@ class CleanerApp:
             return
 
         self._debloat_busy = True
-        self._busy = True
-        self._cancel_flag = False
         self._debloat_uninstall_btn.configure(state="disabled")
-        self._debloat_cancel_btn.configure(state="normal")
-        self._debloat_status.set(f"⏳ 正在卸载 {len(selected)} 个应用……（可点“取消”中止）")
+        self._debloat_status.set(f"正在卸载 {len(selected)} 个应用……")
         self._log(f"[卸载预装] 开始卸载 {len(selected)} 个应用……")
 
         def worker():
             ok, fail = 0, 0
-            cancelled = False
             for iid, app in selected:
-                if self._cancel_flag:
-                    cancelled = True
-                    self._log("[卸载预装] 用户已取消，停止后续卸载。")
-                    break
                 if app.get("xbox"):
                     ps = ("Get-AppxPackage *Xbox* | Where-Object "
                           "{$_.Name -notmatch 'XboxGameCallableUI'} | "
@@ -2591,7 +2172,7 @@ class CleanerApp:
                     fail += 1
                     self._log(f"  [失败/跳过] {app['name']}")
                 self.root.after(0, self._debloat_mark_result, iid, gone)
-            self.root.after(0, self._debloat_uninstall_done, ok, fail, cancelled)
+            self.root.after(0, self._debloat_uninstall_done, ok, fail)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -2603,27 +2184,16 @@ class CleanerApp:
         tree.item(iid, values=vals)
         self._debloat_redraw(iid)
 
-    def _debloat_uninstall_done(self, ok, fail, cancelled=False):
+    def _debloat_uninstall_done(self, ok, fail):
         self._debloat_busy = False
-        self._busy = False
         self._debloat_uninstall_btn.configure(state="normal")
-        self._debloat_cancel_btn.configure(state="disabled")
-        if cancelled:
-            self._debloat_status.set(f"已取消：成功 {ok} 项，失败/跳过 {fail} 项。")
-            self._log(f"[卸载预装] 已取消：成功 {ok}，失败/跳过 {fail}。")
-            messagebox.showinfo(
-                "已取消",
-                f"卸载已中止。\n成功 {ok} 项，失败/跳过 {fail} 项。\n详见运行日志。",
-                parent=self._debloat_win,
-            )
-        else:
-            self._debloat_status.set(f"卸载完成：成功 {ok} 项，失败/跳过 {fail} 项。")
-            self._log(f"[卸载预装] 全部完成：成功 {ok}，失败/跳过 {fail}。")
-            messagebox.showinfo(
-                "卸载完成",
-                f"成功卸载 {ok} 项，失败/跳过 {fail} 项。\n详见运行日志。",
-                parent=self._debloat_win,
-            )
+        self._debloat_status.set(f"卸载完成：成功 {ok} 项，失败/跳过 {fail} 项。")
+        self._log(f"[卸载预装] 全部完成：成功 {ok}，失败/跳过 {fail}。")
+        messagebox.showinfo(
+            "卸载完成",
+            f"成功卸载 {ok} 项，失败/跳过 {fail} 项。\n详见运行日志。",
+            parent=self._debloat_win,
+        )
 
     # ---- Windows 深度优化（提取自开源 Optimizer 的注册表开关）----
     def open_deep(self):
@@ -2683,7 +2253,9 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        self._style_dark_treeview(tree)
+        tree.tag_configure("checked", background="#e8f5e9")
+        tree.tag_configure("highrisk", foreground="#b00020")
+        tree.tag_configure("done", foreground="#1565c0")
 
         self._deep_tree = tree
         self._deep_vars = {}
@@ -2700,14 +2272,8 @@ class CleanerApp:
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="全选", command=lambda: self._deep_set_all(True)).pack(side="left", padx=2)
         ttk.Button(bar, text="全不选", command=lambda: self._deep_set_all(False)).pack(side="left", padx=2)
-        self._deep_apply_btn = ttk.Button(bar, text="应用所选", command=lambda: self._deep_execute("apply"))
-        self._deep_apply_btn.pack(side="right", padx=2)
-        self._deep_revert_btn = ttk.Button(bar, text="还原所选", command=lambda: self._deep_execute("revert"))
-        self._deep_revert_btn.pack(side="right", padx=2)
-        # 执行期间亮起的“取消”按钮（与统一异步执行器联动）
-        self._deep_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
-                                           command=self._cancel_running)
-        self._deep_cancel_btn.pack(side="right", padx=2)
+        ttk.Button(bar, text="应用所选", command=lambda: self._deep_execute("apply")).pack(side="right", padx=2)
+        ttk.Button(bar, text="还原所选", command=lambda: self._deep_execute("revert")).pack(side="right", padx=2)
 
         self._deep_status = tk.StringVar(value="提示：逐项勾选，再点“应用所选”或“还原所选”。")
         ttk.Label(win, textvariable=self._deep_status,
@@ -2747,7 +2313,7 @@ class CleanerApp:
             self._deep_redraw(iid)
 
     def _deep_execute(self, mode):
-        if getattr(self, "_busy", False):
+        if getattr(self, "_deep_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._deep_win)
             return
         sel = [(iid, DEEP_OPTS[int(iid)]) for iid in self._deep_vars if self._deep_vars[iid].get()]
@@ -2759,26 +2325,43 @@ class CleanerApp:
         risk = (f"即将{verb}以下 {len(sel)} 项深度优化（注册表/服务调整）：\n\n{names}\n\n"
                 "说明：全部可逆——之后勾选相同项并点“还原所选”即可恢复 Windows 默认。"
                 "写 HKLM 的项需管理员权限，将触发 UAC。\n\n确认？")
+        if not messagebox.askyesno("确认" + verb, risk, parent=self._deep_win):
+            self._log(f"[深度优化] 已取消。")
+            return
         cmds = []
         for _, o in sel:
             cmds.extend(o[mode])
-        iids = [iid for iid, _ in sel]
-        self._deep_status.set(f"⏳ {verb}中：{names}")
+        full = " & ".join(cmds)
+        self._deep_busy = True
+        self._deep_status.set(f"{verb}中：{names}")
         self._log(f"[深度优化] {verb} {len(sel)} 项……")
-        # 复用统一异步执行器：后台线程 + 按钮置灰 + 取消按钮亮起
-        self._run_admin_cmd(
-            cmds, "确认" + verb, risk,
-            on_done=lambda m, c: self._deep_done(m, iids, c),
-            btns=(self._deep_apply_btn, self._deep_revert_btn),
-            cancel_btn=self._deep_cancel_btn,
-            mode=mode, parent=self._deep_win,
-        )
+        if is_admin():
+            threading.Thread(target=self._deep_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
+        else:
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
+            if ret > 32:
+                for iid, _ in sel:
+                    self._deep_set_status(iid, "已" + verb)
+                self._deep_busy = False
+                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._deep_win)
+            else:
+                self._deep_busy = False
+                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._deep_win)
+
+    def _deep_thread(self, full, mode, iids):
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[深度优化] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._deep_done, mode, iids, r.returncode)
+        except Exception as e:
+            self._log(f"[深度优化] 执行异常：{e}")
+            self.root.after(0, self._deep_done, mode, iids, -1)
 
     def _deep_done(self, mode, iids, code):
-        if code == "CANCELLED":
-            verb = "已取消"
-        else:
-            verb = "已应用" if mode == "apply" else "已还原"
+        self._deep_busy = False
+        verb = "已应用" if mode == "apply" else "已还原"
         for iid in iids:
             self._deep_set_status(iid, verb)
         self._deep_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
@@ -2839,7 +2422,9 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        self._style_dark_treeview(tree)
+        tree.tag_configure("checked", background="#e8f5e9")
+        tree.tag_configure("highrisk", foreground="#b00020")
+        tree.tag_configure("done", foreground="#1565c0")
 
         self._power_tree = tree
         self._power_vars = {}
@@ -2856,13 +2441,8 @@ class CleanerApp:
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="全选", command=lambda: self._power_set_all(True)).pack(side="left", padx=2)
         ttk.Button(bar, text="全不选", command=lambda: self._power_set_all(False)).pack(side="left", padx=2)
-        self._power_apply_btn = ttk.Button(bar, text="应用所选", command=lambda: self._power_execute("apply"))
-        self._power_apply_btn.pack(side="right", padx=2)
-        self._power_revert_btn = ttk.Button(bar, text="还原所选", command=lambda: self._power_execute("revert"))
-        self._power_revert_btn.pack(side="right", padx=2)
-        self._power_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
-                                            command=self._cancel_running)
-        self._power_cancel_btn.pack(side="right", padx=2)
+        ttk.Button(bar, text="应用所选", command=lambda: self._power_execute("apply")).pack(side="right", padx=2)
+        ttk.Button(bar, text="还原所选", command=lambda: self._power_execute("revert")).pack(side="right", padx=2)
 
         self._power_status = tk.StringVar(value="提示：逐项勾选，再点“应用所选”或“还原所选”。")
         ttk.Label(win, textvariable=self._power_status,
@@ -2901,7 +2481,7 @@ class CleanerApp:
             self._power_redraw(iid)
 
     def _power_execute(self, mode):
-        if getattr(self, "_busy", False):
+        if getattr(self, "_power_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._power_win)
             return
         sel = [(iid, POWER_OPTS[int(iid)]) for iid in self._power_vars if self._power_vars[iid].get()]
@@ -2912,25 +2492,43 @@ class CleanerApp:
         names = "、".join(o["name"] for _, o in sel)
         risk = (f"即将{verb}以下 {len(sel)} 项电源/性能调整：\n\n{names}\n\n"
                 "全部可逆——之后勾选相同项点“还原所选”即可恢复。写 HKLM 需管理员，将触发 UAC。\n\n确认？")
+        if not messagebox.askyesno("确认" + verb, risk, parent=self._power_win):
+            self._log("[电源/性能] 已取消。")
+            return
         cmds = []
         for _, o in sel:
             cmds.extend(o[mode])
-        iids = [iid for iid, _ in sel]
-        self._power_status.set(f"⏳ {verb}中：{names}")
+        full = " & ".join(cmds)
+        self._power_busy = True
+        self._power_status.set(f"{verb}中：{names}")
         self._log(f"[电源/性能] {verb} {len(sel)} 项……")
-        self._run_admin_cmd(
-            cmds, "确认" + verb, risk,
-            on_done=lambda m, c: self._power_done(m, iids, c),
-            btns=(self._power_apply_btn, self._power_revert_btn),
-            cancel_btn=self._power_cancel_btn,
-            mode=mode, parent=self._power_win,
-        )
+        if is_admin():
+            threading.Thread(target=self._power_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
+        else:
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
+            if ret > 32:
+                for iid, _ in sel:
+                    self._power_set_status(iid, "已" + verb)
+                self._power_busy = False
+                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._power_win)
+            else:
+                self._power_busy = False
+                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._power_win)
+
+    def _power_thread(self, full, mode, iids):
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[电源/性能] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._power_done, mode, iids, r.returncode)
+        except Exception as e:
+            self._log(f"[电源/性能] 执行异常：{e}")
+            self.root.after(0, self._power_done, mode, iids, -1)
 
     def _power_done(self, mode, iids, code):
-        if code == "CANCELLED":
-            verb = "已取消"
-        else:
-            verb = "已应用" if mode == "apply" else "已还原"
+        self._power_busy = False
+        verb = "已应用" if mode == "apply" else "已还原"
         for iid in iids:
             self._power_set_status(iid, verb)
         self._power_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
@@ -2991,7 +2589,9 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        self._style_dark_treeview(tree)
+        tree.tag_configure("checked", background="#e8f5e9")
+        tree.tag_configure("highrisk", foreground="#b00020")
+        tree.tag_configure("done", foreground="#1565c0")
 
         self._gpu_tree = tree
         self._gpu_vars = {}
@@ -3006,13 +2606,8 @@ class CleanerApp:
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="全选", command=lambda: self._gpu_set_all(True)).pack(side="left", padx=2)
         ttk.Button(bar, text="全不选", command=lambda: self._gpu_set_all(False)).pack(side="left", padx=2)
-        self._gpu_apply_btn = ttk.Button(bar, text="应用所选", command=lambda: self._gpu_execute("apply"))
-        self._gpu_apply_btn.pack(side="right", padx=2)
-        self._gpu_revert_btn = ttk.Button(bar, text="还原所选", command=lambda: self._gpu_execute("revert"))
-        self._gpu_revert_btn.pack(side="right", padx=2)
-        self._gpu_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
-                                          command=self._cancel_running)
-        self._gpu_cancel_btn.pack(side="right", padx=2)
+        ttk.Button(bar, text="应用所选", command=lambda: self._gpu_execute("apply")).pack(side="right", padx=2)
+        ttk.Button(bar, text="还原所选", command=lambda: self._gpu_execute("revert")).pack(side="right", padx=2)
 
         threading.Thread(target=self._gpu_detect, args=(win,), daemon=True).start()
 
@@ -3115,7 +2710,7 @@ class CleanerApp:
             self._gpu_redraw(iid)
 
     def _gpu_execute(self, mode):
-        if getattr(self, "_busy", False):
+        if getattr(self, "_gpu_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._gpu_win)
             return
         sel = [(iid, self._gpu_applicable[int(iid)]) for iid in self._gpu_vars if self._gpu_vars[iid].get()]
@@ -3144,22 +2739,36 @@ class CleanerApp:
             messagebox.showwarning("提示", "未找到匹配的 GPU 注册表索引，无法应用。", parent=self._gpu_win)
             return
         full = " & ".join(cmds)
-        self._gpu_status.set(f"⏳ {verb}中：{names}")
+        self._gpu_busy = True
+        self._gpu_status.set(f"{verb}中：{names}")
         self._log(f"[GPU] {verb} {len(sel)} 项……")
-        # 复用统一异步执行器（后台线程 + 按钮置灰 + 取消按钮亮起）
-        self._run_admin_cmd(
-            cmds, "确认" + verb, risk,
-            on_done=lambda m, c: self._gpu_done(m, [iid for iid, _ in sel], c),
-            btns=(self._gpu_apply_btn, self._gpu_revert_btn),
-            cancel_btn=self._gpu_cancel_btn,
-            mode=mode, parent=self._gpu_win,
-        )
+        if is_admin():
+            threading.Thread(target=self._gpu_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
+        else:
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
+            if ret > 32:
+                for iid, _ in sel:
+                    self._gpu_set_status(iid, "已" + verb)
+                self._gpu_busy = False
+                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._gpu_win)
+            else:
+                self._gpu_busy = False
+                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._gpu_win)
+
+    def _gpu_thread(self, full, mode, iids):
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[GPU] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._gpu_done, mode, iids, r.returncode)
+        except Exception as e:
+            self._log(f"[GPU] 执行异常：{e}")
+            self.root.after(0, self._gpu_done, mode, iids, -1)
 
     def _gpu_done(self, mode, iids, code):
-        if code == "CANCELLED":
-            verb = "已取消"
-        else:
-            verb = "已应用" if mode == "apply" else "已还原"
+        self._gpu_busy = False
+        verb = "已应用" if mode == "apply" else "已还原"
         for iid in iids:
             self._gpu_set_status(iid, verb)
         self._gpu_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
@@ -3220,7 +2829,8 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        self._style_dark_treeview(tree, with_checked=False)
+        tree.tag_configure("disabled", foreground="#b00020")
+        tree.tag_configure("enabled", foreground="#1565c0")
 
         self._startup_tree = tree
         self._startup_vars = {}
@@ -3233,13 +2843,8 @@ class CleanerApp:
         bar = ttk.Frame(win)
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="刷新", command=self._startup_refresh).pack(side="left", padx=2)
-        self._startup_disable_btn = ttk.Button(bar, text="禁用所选", command=lambda: self._startup_toggle(False))
-        self._startup_disable_btn.pack(side="right", padx=2)
-        self._startup_enable_btn = ttk.Button(bar, text="启用所选", command=lambda: self._startup_toggle(True))
-        self._startup_enable_btn.pack(side="right", padx=2)
-        self._startup_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
-                                              command=self._cancel_running)
-        self._startup_cancel_btn.pack(side="right", padx=2)
+        ttk.Button(bar, text="禁用所选", command=lambda: self._startup_toggle(False)).pack(side="right", padx=2)
+        ttk.Button(bar, text="启用所选", command=lambda: self._startup_toggle(True)).pack(side="right", padx=2)
 
         tree.bind("<Button-1>", self._on_startup_click)
         threading.Thread(target=self._startup_enumerate, args=(win,), daemon=True).start()
@@ -3358,7 +2963,7 @@ class CleanerApp:
         tree.item(iid, values=vals)
 
     def _startup_toggle(self, enable):
-        if getattr(self, "_busy", False):
+        if getattr(self, "_startup_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._startup_win)
             return
         sel = [self._startup_items[int(iid)] for iid in self._startup_vars if self._startup_vars[iid].get()]
@@ -3383,19 +2988,35 @@ class CleanerApp:
             else:
                 tn = (it["Key"].rstrip("\\") + "\\" + it["VN"]).strip("\\")
                 cmds.append(f'schtasks /Change /TN "{tn}" /{"ENABLE" if enable else "DISABLE"}')
-        self._startup_status.set(f"⏳ {verb}中：{names}")
+        full = " & ".join(cmds)
+        self._startup_busy = True
+        self._startup_status.set(f"{verb}中：{names}")
         self._log(f"[启动项] {verb} {len(sel)} 项……")
-        # 复用统一异步执行器（后台线程 + 按钮置灰 + 取消按钮亮起）
-        self._run_admin_cmd(
-            cmds, "确认" + verb, risk,
-            on_done=lambda m, c: self._startup_done(enable, sel, c),
-            btns=(self._startup_disable_btn, self._startup_enable_btn),
-            cancel_btn=self._startup_cancel_btn,
-            mode=verb, parent=self._startup_win,
-        )
+        if is_admin():
+            threading.Thread(target=self._startup_thread, args=(full, enable, sel), daemon=True).start()
+        else:
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
+            if ret > 32:
+                self._startup_busy = False
+                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._startup_win)
+            else:
+                self._startup_busy = False
+                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._startup_win)
+
+    def _startup_thread(self, full, enable, sel):
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[启动项] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._startup_done, enable, sel, r.returncode)
+        except Exception as e:
+            self._log(f"[启动项] 执行异常：{e}")
+            self.root.after(0, self._startup_done, enable, sel, -1)
 
     def _startup_done(self, enable, sel, code):
-        verb = "已取消" if code == "CANCELLED" else ("已启用" if enable else "已禁用")
+        self._startup_busy = False
+        verb = "已启用" if enable else "已禁用"
         for it in sel:
             it["Enabled"] = enable
         self._startup_refresh()
@@ -3450,7 +3071,9 @@ class CleanerApp:
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=vsb.set)
-        self._style_dark_treeview(tree)
+        tree.tag_configure("checked", background="#e8f5e9")
+        tree.tag_configure("highrisk", foreground="#b00020")
+        tree.tag_configure("done", foreground="#1565c0")
 
         self._optduck_tree = tree
         self._optduck_vars = {}
@@ -3467,13 +3090,8 @@ class CleanerApp:
         bar.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Button(bar, text="全选", command=lambda: self._optduck_set_all(True)).pack(side="left", padx=2)
         ttk.Button(bar, text="全不选", command=lambda: self._optduck_set_all(False)).pack(side="left", padx=2)
-        self._optduck_apply_btn = ttk.Button(bar, text="应用所选", command=lambda: self._optduck_execute("apply"))
-        self._optduck_apply_btn.pack(side="right", padx=2)
-        self._optduck_revert_btn = ttk.Button(bar, text="还原所选", command=lambda: self._optduck_execute("revert"))
-        self._optduck_revert_btn.pack(side="right", padx=2)
-        self._optduck_cancel_btn = ttk.Button(bar, text="取消", state="disabled",
-                                              command=self._cancel_running)
-        self._optduck_cancel_btn.pack(side="right", padx=2)
+        ttk.Button(bar, text="应用所选", command=lambda: self._optduck_execute("apply")).pack(side="right", padx=2)
+        ttk.Button(bar, text="还原所选", command=lambda: self._optduck_execute("revert")).pack(side="right", padx=2)
 
         self._optduck_status = tk.StringVar(value="提示：逐项勾选，再点“应用所选”或“还原所选”。")
         ttk.Label(win, textvariable=self._optduck_status,
@@ -3512,7 +3130,7 @@ class CleanerApp:
             self._optduck_redraw(iid)
 
     def _optduck_execute(self, mode):
-        if getattr(self, "_busy", False):
+        if getattr(self, "_optduck_busy", False):
             messagebox.showwarning("请稍候", "正在处理，请等待当前操作完成。", parent=self._optduck_win)
             return
         sel = [(iid, OPTDUCK_OPTS[int(iid)]) for iid in self._optduck_vars if self._optduck_vars[iid].get()]
@@ -3523,25 +3141,43 @@ class CleanerApp:
         names = "、".join(o["name"] for _, o in sel)
         risk = (f"即将{verb}以下 {len(sel)} 项 optimizerDuck 优化（注册表/服务/计划任务/电源）：\n\n{names}\n\n"
                 "全部可逆——之后勾选相同项点“还原所选”即可恢复。写 HKLM / 服务 / 计划任务需管理员，将触发 UAC。\n\n确认？")
+        if not messagebox.askyesno("确认" + verb, risk, parent=self._optduck_win):
+            self._log("[optimizerDuck] 已取消。")
+            return
         cmds = []
         for _, o in sel:
             cmds.extend(o[mode])
-        iids = [iid for iid, _ in sel]
-        self._optduck_status.set(f"⏳ {verb}中：{names}")
+        full = " & ".join(cmds)
+        self._optduck_busy = True
+        self._optduck_status.set(f"{verb}中：{names}")
         self._log(f"[optimizerDuck] {verb} {len(sel)} 项……")
-        self._run_admin_cmd(
-            cmds, "确认" + verb, risk,
-            on_done=lambda m, c: self._optduck_done(m, iids, c),
-            btns=(self._optduck_apply_btn, self._optduck_revert_btn),
-            cancel_btn=self._optduck_cancel_btn,
-            mode=mode, parent=self._optduck_win,
-        )
+        if is_admin():
+            threading.Thread(target=self._optduck_thread, args=(full, mode, [iid for iid, _ in sel]), daemon=True).start()
+        else:
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f"/c {full}", None, 0)
+            if ret > 32:
+                for iid, _ in sel:
+                    self._optduck_set_status(iid, "已" + verb)
+                self._optduck_busy = False
+                messagebox.showinfo("已请求提权", "已以管理员身份执行，详见命令窗口/日志。", parent=self._optduck_win)
+            else:
+                self._optduck_busy = False
+                messagebox.showerror("提权失败", "请手动以管理员身份运行本工具。", parent=self._optduck_win)
+
+    def _optduck_thread(self, full, mode, iids):
+        try:
+            r = subprocess.run(full, shell=True, capture_output=True, text=True,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[optimizerDuck] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._optduck_done, mode, iids, r.returncode)
+        except Exception as e:
+            self._log(f"[optimizerDuck] 执行异常：{e}")
+            self.root.after(0, self._optduck_done, mode, iids, -1)
 
     def _optduck_done(self, mode, iids, code):
-        if code == "CANCELLED":
-            verb = "已取消"
-        else:
-            verb = "已应用" if mode == "apply" else "已还原"
+        self._optduck_busy = False
+        verb = "已应用" if mode == "apply" else "已还原"
         for iid in iids:
             self._optduck_set_status(iid, verb)
         self._optduck_status.set(f"{verb} {len(iids)} 项。返回码 {code}。")
@@ -3554,43 +3190,27 @@ class CleanerApp:
         tree.item(iid, values=vals)
         self._optduck_redraw(iid)
 
-    # ---- 统一异步执行器（所有“优化/清理”按钮共用：后台线程 + loading 指示 + 可取消）----
-    def _run_admin_cmd(self, cmds, title, risk_note, on_done=None, btns=(),
-                       cancel_btn=None, mode=None, parent=None):
-        """统一的“管理员命令”异步执行器。所有优化面板与一键优化卡片都走这里，保证：
-        - 命令在后台线程执行，绝不阻塞 tkinter 主线程（界面全程可响应）；
-        - 执行期间传入的 btns 全部置灰、cancel_btn 亮起（明确的 loading 指示）；
-        - 支持中途取消（用户点“取消”→ 终止后台进程）；
-        - 完成后自动恢复按钮、调用 on_done(mode, code) 更新面板状态。
-        非管理员时改用 ShellExecuteW(runas) 触发 UAC（本进程不跟踪外部 cmd 进度）。
+    # ---- 一键系统优化（需管理员，执行前二次确认）----
+    def _run_admin_cmd(self, cmds, title, risk_note):
+        """以管理员权限顺序执行命令列表 cmds（命令字符串）。执行前先弹确认框说明风险/可逆方式。
+
+        - 若本工具已是管理员：提交到后台线程执行（避免 gpupdate/taskkill 等耗时命令
+          阻塞 tkinter 主线程导致界面卡死无响应），完成后回主线程弹结果。
+        - 若非管理员：用 ShellExecuteW(runas) 触发 UAC 提权执行（非阻塞，立即返回）。
+        所有项均可逆，恢复方法写在 risk_note 里告知用户。
         """
         if getattr(self, "_busy", False):
-            messagebox.showwarning("请稍候", "上一条命令还在执行，请等待完成。", parent=parent)
+            messagebox.showwarning("请稍候", "上一条命令还在执行，请等待完成。")
             return False
-        if not messagebox.askyesno(title, risk_note, parent=parent):
+        if not messagebox.askyesno(title, risk_note):
             self._log(f"[{title}] 已取消。")
             return False
         full = " & ".join(cmds)
-        self._busy = True
-        self._cancel_flag = False
-        self._running_proc = None
-        btns = list(btns or ())
-        for b in btns:
-            try:
-                b.configure(state="disabled")
-            except Exception:
-                pass
-        if cancel_btn is not None:
-            try:
-                cancel_btn.configure(state="normal")
-            except Exception:
-                pass
-        self._log(f"[{title}] 正在后台执行，请稍候…（界面可正常操作，可点“取消”中止）")
         if is_admin():
+            self._busy = True
+            self._log(f"[{title}] 正在执行，请稍候…（组策略刷新可能耗时数十秒，界面照常可操作）")
             threading.Thread(
-                target=self._exec_admin_thread,
-                args=(full, title, on_done, mode, btns, cancel_btn, parent),
-                daemon=True,
+                target=self._exec_admin_thread, args=(full, title), daemon=True
             ).start()
             return None
         else:
@@ -3600,87 +3220,32 @@ class CleanerApp:
             ok = ret > 32
             self._log(f"[{title}] UAC 提权启动，ShellExecute 返回 {ret}")
             if ok:
-                messagebox.showinfo(title, "已请求管理员权限执行（详见命令窗口/日志）。", parent=parent)
+                messagebox.showinfo(title, "已请求管理员权限执行（详见命令窗口/日志）。")
             else:
-                messagebox.showerror(title, "提权失败，请手动以管理员身份运行本工具。", parent=parent)
-            # 非管理员路径：命令在外部 cmd 窗口执行，本进程不跟踪进度，直接恢复按钮
-            self._finish_async(title, on_done, mode, None if ok else -1, btns, cancel_btn, parent)
+                messagebox.showerror(title, "提权失败，请手动以管理员身份运行本工具。")
             return ok
 
-    def _exec_admin_thread(self, full, title, on_done, mode, btns, cancel_btn, parent):
-        """后台线程：用 Popen 执行命令，轮询取消标志；完成后回主线程收尾。"""
+    def _exec_admin_thread(self, full, title):
+        """后台线程：真正执行命令，完成后通过 root.after 切回主线程更新 UI。"""
         try:
-            proc = subprocess.Popen(
+            r = subprocess.run(
                 full, shell=True,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                capture_output=True, text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
-            self._running_proc = proc
-            out_buf = []
-            while True:
-                if self._cancel_flag:
-                    try:
-                        proc.terminate()
-                        proc.wait(timeout=5)
-                    except Exception:
-                        try:
-                            proc.kill()
-                        except Exception:
-                            pass
-                    self._log(f"[{title}] 已被用户取消。")
-                    self.root.after(0, self._finish_async, title, on_done, mode,
-                                    "CANCELLED", btns, cancel_btn, parent)
-                    return
-                line = proc.stdout.readline() if proc.stdout else ""
-                if line == "" and proc.poll() is not None:
-                    break
-                if line:
-                    s = line.rstrip()
-                    if s:
-                        self._log(s)
-            self._log(f"[{title}] 返回码 {proc.returncode}")
-            self.root.after(0, self._finish_async, title, on_done, mode,
-                            proc.returncode, btns, cancel_btn, parent)
+            out = (r.stdout or "") + (r.stderr or "")
+            self._log(f"[{title}] 返回码 {r.returncode}\n{out.strip()}")
+            self.root.after(0, self._on_admin_done, title, r.returncode, out.strip())
         except Exception as e:
             self._log(f"[{title}] 执行异常：{e}")
-            self.root.after(0, self._finish_async, title, on_done, mode, -1, btns, cancel_btn, parent)
+            self.root.after(0, self._on_admin_done, title, -1, str(e))
 
-    def _finish_async(self, title, on_done, mode, code, btns, cancel_btn, parent):
+    def _on_admin_done(self, title, code, out):
         self._busy = False
-        self._running_proc = None
-        for b in (btns or ()):
-            try:
-                b.configure(state="normal")
-            except Exception:
-                pass
-        if cancel_btn is not None:
-            try:
-                cancel_btn.configure(state="disabled")
-            except Exception:
-                pass
-        if on_done is not None:
-            try:
-                on_done(mode, code)
-            except Exception as e:
-                self._log(f"[{title}] 回调异常：{e}")
+        if code == 0:
+            messagebox.showinfo(title, "执行成功。")
         else:
-            # 无自定义回调（一键优化卡片路径）：弹通用结果框 + 恢复卡片按钮
-            if code == "CANCELLED":
-                messagebox.showinfo(title, "已取消执行。", parent=parent)
-            elif code == 0:
-                messagebox.showinfo(title, "执行成功。", parent=parent)
-            elif code is None:
-                pass  # 非管理员路径已弹过提示
-            else:
-                messagebox.showwarning(title, f"命令返回非零：{code}", parent=parent)
-            self._restore_opt_btn()
-
-    def _cancel_running(self):
-        """用户点“取消”时置标志；后台线程下一轮轮询即终止进程。"""
-        if not getattr(self, "_busy", False):
-            return
-        self._cancel_flag = True
-        self._log("已请求取消，正在终止后台进程……")
+            messagebox.showwarning(title, f"命令返回非零：{code}\n{out}")
 
     def opt_high_perf(self):
         self._run_admin_cmd(
@@ -3792,8 +3357,10 @@ class CleanerApp:
                 out1,
             )
             if not m:
-                self._log(f"[卓越电源] 失败：未在 duplicatescheme 输出中找到 GUID。\n{out1.strip()}")
-                self.root.after(0, self._finish_async, title, None, None, -1, [], None, None)
+                self.root.after(
+                    0, self._on_admin_done, title, -1,
+                    f"未在 duplicatescheme 输出中找到 GUID。\n{out1.strip()}",
+                )
                 return
             new_guid = m.group(0)
             self._log(f"[卓越电源] 副本 GUID：{new_guid}")
@@ -3805,10 +3372,10 @@ class CleanerApp:
             )
             out2 = (r2.stdout or "") + (r2.stderr or "")
             self._log(f"[卓越电源] 步骤2 返回码 {r2.returncode}\n{out2.strip()}")
-            self.root.after(0, self._finish_async, title, None, None, r2.returncode, [], None, None)
+            self.root.after(0, self._on_admin_done, title, r2.returncode, out2.strip())
         except Exception as e:
             self._log(f"[卓越电源] 异常：{e}")
-            self.root.after(0, self._finish_async, title, None, None, -1, [], None, None)
+            self.root.after(0, self._on_admin_done, title, -1, str(e))
 
     def opt_dns_flush(self):
         self._run_admin_cmd(
@@ -4019,16 +3586,14 @@ class CleanerApp:
         self.stat_var.set(f"已选占用：{human_size(total)} ｜ 文件数：{count}")
 
     def _log(self, msg):
-        # tkinter（Tcl 解释器）不是线程安全的。后台线程（扫描 / 清理 / 优化执行器 /
-        # 卓越电源 / 卸载预装 / GPU 检测）若直接操作 ScrolledText，会在主线程事件循环
-        # 与子线程之间竞争 Tcl 解释器锁，导致后台运行时界面整体卡死（死锁）。
-        # 因此非主线程的调用一律转发到主线程执行。
-        if threading.current_thread() is not threading.main_thread():
-            try:
+        """输出运行日志。线程安全——后台线程调用会通过 after(0) 转发到主线程，
+        避免与 Tk 事件循环争抢 Tcl 解释器锁造成的卡死或崩溃。"""
+        try:
+            if threading.current_thread() is not threading.main_thread():
                 self.root.after(0, self._log, msg)
-            except Exception:
-                pass
-            return
+                return
+        except Exception:
+            pass
         try:
             self.log.configure(state="normal")
             self.log.insert("end", msg + "\n")
@@ -4039,14 +3604,22 @@ class CleanerApp:
 
     # ---- 扫描 ----
     def _scan(self):
-        self.btn_scan.disable()
+        self.btn_scan.configure(state="disabled")
         drives = "、".join(d + "盘" for d in get_fixed_drives())
         self._log(f"开始扫描已选项目的占用空间……（已探测固定硬盘：{drives}）")
 
+        def _scan_update_row(iid, vals):
+            # 仅主线程：直接更新 Treeview 行
+            try:
+                self.tree.item(iid, values=vals)
+            except Exception:
+                pass
+
+        def _scan_done():
+            self._update_stat()
+            self.btn_scan.configure(state="normal")
+
         def worker():
-            # 重活（遍历磁盘计算占用）在后台线程做；UI 更新必须回到主线程，
-            # 否则直接调用 tree.item / _update_stat 会与主线程事件循环竞争 Tcl
-            # 解释器锁，导致后台扫描时界面卡死。
             for item in CLEAN_ITEMS:
                 if not self.item_vars[item["id"]].get():
                     continue
@@ -4057,24 +3630,21 @@ class CleanerApp:
                     self._log(f"  [跳过] {item['name']} 扫描出错：{e}")
                 self.item_size[item["id"]] = sz
                 self.item_count[item["id"]] = cnt
-                self.root.after(0, self._scan_update_row, item, sz, cnt)
-            self.root.after(0, self._scan_done)
+                vals = list(self.tree.item(item["id"], "values"))
+                vals[3] = f"{human_size(sz)} ({cnt})"
+                # 跨线程：把 UI 更新转发到主线程
+                try:
+                    self.root.after(0, _scan_update_row, item["id"], vals)
+                except Exception:
+                    pass
+                self._log(f"  {item['name']}：{human_size(sz)}（{cnt} 个文件）")
+            self._log("扫描完成。请确认无误后点击“开始清理”。")
+            try:
+                self.root.after(0, _scan_done)
+            except Exception:
+                pass
 
         threading.Thread(target=worker, daemon=True).start()
-
-    def _scan_update_row(self, item, sz, cnt):
-        try:
-            vals = list(self.tree.item(item["id"], "values"))
-            vals[3] = f"{human_size(sz)} ({cnt})"
-            self.tree.item(item["id"], values=vals)
-            self._update_stat()
-        except Exception:
-            pass
-        self._log(f"  {item['name']}：{human_size(sz)}（{cnt} 个文件）")
-
-    def _scan_done(self):
-        self._log("扫描完成。请确认无误后点击“开始清理”。")
-        self.btn_scan.enable()
 
     # ---- 清理 ----
     def _ask_clean(self):
@@ -4101,8 +3671,8 @@ class CleanerApp:
 
     def _clean(self):
         self.cleaning = True
-        self.btn_scan.disable()
-        self.btn_clean.disable()
+        self.btn_scan.configure(state="disabled")
+        self.btn_clean.configure(state="disabled")
         self._log("====== 开始清理 ======")
 
         def worker():
@@ -4128,8 +3698,8 @@ class CleanerApp:
 
     def _finish_clean(self, freed, removed):
         self.cleaning = False
-        self.btn_scan.enable()
-        self.btn_clean.enable()
+        self.btn_scan.configure(state="normal")
+        self.btn_clean.configure(state="normal")
         messagebox.showinfo("完成", f"清理完成！\n共释放：{human_size(freed)}\n删除：{removed} 个文件/目录")
         self._scan()
 
