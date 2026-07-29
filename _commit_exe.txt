@@ -1,0 +1,5 @@
+build: 重新打包 exe（融合 light-c + block-ads，源码 834c92c）
+
+- 系统优化工具箱.exe 已包含 lightc_cleaners.py（LightC 23 项）与
+  进程拦截面板（block-ads 融合）；CLEAN_ITEMS 共 200 项。
+- 验证：exe --scan 只读模式正常输出合并后的清理项（含 BleachBit 与 LightC 条目）。
