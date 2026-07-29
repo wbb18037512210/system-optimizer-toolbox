@@ -630,6 +630,18 @@ except Exception as _bb_err:
     BLEACHBIT_CLEAN_ITEMS = []
     print("[bleachbit] 加载失败，已跳过：", _bb_err)
 
+# LightC 2.15.0 清理能力派生：垃圾清理 / 社交软件缓存 / AI 模型缓存。
+# 原始版权归 LightC 项目所有（Rust + Tauri）。文件型清理目标转换为原生
+# CLEAN_ITEMS，派生自 light-c-2.15.0.zip 的扫描器源码。注册表/动态探测类
+# 清理（注册表冗余、右键菜单、外壳图标、系统瘦身、旧驱动）超出本框架模型，已省略。
+# 原始配置在本程序同目录 lightc_cleaners.py。
+try:
+    from lightc_cleaners import LIGHTC_CLEAN_ITEMS
+    CLEAN_ITEMS.extend(LIGHTC_CLEAN_ITEMS)
+except Exception as _lc_err:
+    LIGHTC_CLEAN_ITEMS = []
+    print("[lightc] 加载失败，已跳过：", _lc_err)
+
 # 按风险排序（高 → 中 → 低）：高风险项显示在列表最上方且默认不勾选，
 # 中/低风险项默认全部勾选。
 _RISK_RANK = {"高": 0, "中": 1, "低": 2}
@@ -1752,6 +1764,7 @@ class CleanerApp:
         self._button_grid(g3, [
             ("🚀 Win10 优化", self.launch_win10_optimizer),
             ("🌐 360 联网助手", self.launch_net_assist),
+            ("🛡 进程拦截", self.open_process_block),
         ], per_row=1, padx=4, pady_top=4, width=18)
 
         # 列 4：一键优化（需管理员 + 高危提示上移到分组顶部）
@@ -3758,6 +3771,342 @@ class CleanerApp:
 # ----------------------------------------------------------------------------
 # 4. 入口
 # ----------------------------------------------------------------------------
+    # =====================================================================
+    # 进程拦截（融合自 block-ads：按目录/签名黑名单拦截程序运行）
+    # 复刻其核心能力：folder/sign 黑名单白名单管理 + 后台监控（轮询并终止
+    # 被拦截的进程）。说明：Python 版为“监控并阻止运行”，非驱动级“启动即拦截”，
+    # 行为语义与 block-ads 一致（阻止被拦截程序继续运行），但拦截时机为运行后轮询。
+    # 原始规则文件（folder.txt/sign.txt/...）的目录/签名条目已作为默认规则内嵌。
+    # =====================================================================
+    # 默认规则（取自 block-ads 1.3 的 folder.txt / sign.txt，仅做融合基线）
+    _PB_DEFAULT_FOLDER_BLACK = [
+        "ZxVxTidy", "MultiWeChat", "NetPowerDLLRepair", "武汉优思干科技有限公司",
+        "driverpro360", "winToolBox", "XFQDXTool", "ProZip", "NetPowerZipBingTwo",
+        "WinOptimize", "Adobe Installers", "bizhigame",
+    ]
+    _PB_DEFAULT_SIGN_BLACK = [
+        "天津微极智科技有限公司", "成都智云界科技有限公司", "武汉优思干科技有限公司",
+        "Beijing AoLanDe Information Technology Co., Ltd.",
+        "长沙亿语科技有限公司", "成都汇电时代科技有限公司", "北京创想界科技有限公司",
+        "天津六六游科技有限公司", "Changsha Little Tomato Technology Co., Ltd.",
+        "Shenzhen Chaoshidai Software Co., Ltd.",
+        "Jiangxia Information Technology (Huizhou) Co., Ltd.",
+        "珠海市莫停之科技有限公司",
+    ]
+
+    def _pb_rules_dir(self):
+        if getattr(sys, "frozen", False):
+            base = os.path.dirname(sys.executable)
+        else:
+            base = os.path.dirname(os.path.abspath(__file__))
+        d = os.path.join(base, "blockrules")
+        try:
+            os.makedirs(d, exist_ok=True)
+        except Exception:
+            pass
+        return d
+
+    def _pb_rule_path(self, name):
+        return os.path.join(self._pb_rules_dir(), name)
+
+    def _pb_load_rules(self):
+        """读取 4 个规则文件；不存在则用默认规则写入。返回 dict。"""
+        files = {
+            "folder_black": ("folder_black.txt", self._PB_DEFAULT_FOLDER_BLACK),
+            "sign_black": ("sign_black.txt", self._PB_DEFAULT_SIGN_BLACK),
+            "folder_white": ("folder_white.txt", []),
+            "sign_white": ("sign_white.txt", []),
+        }
+        out = {}
+        for key, (fname, default) in files.items():
+            p = self._pb_rule_path(fname)
+            if not os.path.exists(p):
+                try:
+                    with open(p, "w", encoding="utf-8") as f:
+                        f.write("\n".join(default) + ("\n" if default else ""))
+                except Exception:
+                    pass
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    lines = [ln.strip() for ln in f.read().splitlines()
+                             if ln.strip() and not ln.strip().startswith("#")]
+            except Exception:
+                lines = list(default)
+            out[key] = lines
+        return out
+
+    def _pb_save_rules(self, rules):
+        mapping = {
+            "folder_black": "folder_black.txt",
+            "sign_black": "sign_black.txt",
+            "folder_white": "folder_white.txt",
+            "sign_white": "sign_white.txt",
+        }
+        for key, fname in mapping.items():
+            p = self._pb_rule_path(fname)
+            try:
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write("\n".join(rules.get(key, [])) + "\n")
+            except Exception as e:
+                self._log(f"[进程拦截] 保存规则失败：{e}")
+
+    def _pb_company_cache(self):
+        if not hasattr(self, "_pb_company"):
+            self._pb_company = {}
+        return self._pb_company
+
+    def _pb_get_company(self, path):
+        """读取 exe 的数字签名/版本信息中的公司名（CompanyName）。失败返回 ''。"""
+        cache = self._pb_company_cache()
+        if path in cache:
+            return cache[path]
+        company = ""
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "$OutputEncoding=[System.Text.Encoding]::UTF8;"
+                 "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
+                 "(Get-Item -LiteralPath '%s').VersionInfo.CompanyName" % path.replace("'", "''")],
+                capture_output=True, encoding="utf-8", errors="replace", timeout=8,
+            )
+            company = (out.stdout or "").strip()
+        except Exception:
+            company = ""
+        cache[path] = company
+        return company
+
+    def _pb_enum_processes(self):
+        """返回 [(pid, path, name), ...]，path 可能为空。"""
+        procs = []
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "$OutputEncoding=[System.Text.Encoding]::UTF8;"
+                 "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
+                 "Get-CimInstance Win32_Process | Select-Object ProcessId,Name,ExecutablePath | "
+                 "ForEach-Object { \"$($_.ProcessId)|$($_.Name)|$($_.ExecutablePath)\" }"],
+                capture_output=True, encoding="utf-8", errors="replace", timeout=20,
+            )
+            for line in out.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split("|", 2)
+                pid = parts[0].strip()
+                name = parts[1].strip() if len(parts) > 1 else ""
+                path = parts[2].strip() if len(parts) > 2 else ""
+                if pid.isdigit():
+                    procs.append((int(pid), path, name))
+        except Exception as e:
+            self._log(f"[进程拦截] 枚举进程失败：{e}")
+        return procs
+
+    def _pb_is_blocked(self, path, name, rules):
+        """判定进程是否应被拦截。返回 (是否拦截, 命中规则描述)。"""
+        fb = [r.lower() for r in rules.get("folder_black", [])]
+        fw = [r.lower() for r in rules.get("folder_white", [])]
+        sb = [r.lower() for r in rules.get("sign_black", [])]
+        sw = [r.lower() for r in rules.get("sign_white", [])]
+        pl = (path or "").lower()
+        # 目录白名单优先
+        for w in fw:
+            if w and w in pl:
+                return False, ""
+        # 签名白名单（需查公司名）
+        if sb or sw:
+            comp = self._pb_get_company(path).lower() if path else ""
+            for w in sw:
+                if w and w in comp:
+                    return False, ""
+        # 目录黑名单：路径包含该片段（匹配目录名或完整路径前缀）
+        for r in fb:
+            if r and r in pl:
+                return True, f"目录黑名单：{r}"
+        # 签名黑名单：公司名包含该片段
+        if sb:
+            comp = self._pb_get_company(path).lower() if path else ""
+            for r in sb:
+                if r and r in comp:
+                    return True, f"签名黑名单：{r}"
+        return False, ""
+
+    def _pb_terminate(self, pid, name):
+        try:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F", "/T"],
+                           capture_output=True, encoding="utf-8", errors="replace", timeout=10)
+            return True
+        except Exception as e:
+            self._log(f"[进程拦截] 终止 {name}({pid}) 失败：{e}")
+            return False
+
+    def _pb_log(self, widget, msg):
+        try:
+            if threading.current_thread() is not threading.main_thread():
+                self.root.after(0, self._pb_log, widget, msg)
+                return
+        except Exception:
+            pass
+        try:
+            widget.configure(state="normal")
+            widget.insert("end", msg + "\n")
+            widget.see("end")
+            widget.configure(state="disabled")
+        except Exception:
+            pass
+
+    def _pb_monitor_loop(self, log_widget, status_var):
+        import time
+        check_interval = 5
+        while getattr(self, "_pb_running", False):
+            rules = self._pb_load_rules()
+            procs = self._pb_enum_processes()
+            blocked_count = 0
+            for pid, path, name in procs:
+                if pid in (os.getpid(),):
+                    continue
+                try:
+                    blocked, reason = self._pb_is_blocked(path, name, rules)
+                except Exception:
+                    blocked = False
+                    reason = ""
+                if blocked:
+                    ok = self._pb_terminate(pid, name)
+                    verb = "已终止" if ok else "终止失败"
+                    self._pb_log(log_widget,
+                                 f"[{time.strftime('%H:%M:%S')}] {verb} {name} "
+                                 f"(PID={pid}) 路径={path or '?'} 规则={reason}")
+                    blocked_count += 1
+            if blocked_count:
+                self.root.after(0, status_var.set,
+                                f"监控中 · 本轮拦截 {blocked_count} 个进程")
+            else:
+                self.root.after(0, status_var.set, "监控中 · 未命中")
+            # 分段睡眠，保证可及时停止
+            for _ in range(check_interval * 2):
+                if not getattr(self, "_pb_running", False):
+                    break
+                time.sleep(0.5)
+
+    def open_process_block(self):
+        """打开“进程拦截”子窗口（block-ads 核心能力融合）。"""
+        win = tk.Toplevel(self.root)
+        win.title("进程拦截（融合 block-ads）")
+        win.geometry("920x600")
+        win.transient(self.root)
+        try:
+            win.iconbitmap(self._icon_path)
+        except Exception:
+            pass
+
+        # 顶部工具栏
+        bar = ttk.Frame(win, padding=(8, 6))
+        bar.pack(fill="x")
+        self._pb_status = tk.StringVar(value="已停止")
+        btn_start = ttk.Button(bar, text="▶ 启动监控")
+        btn_stop = ttk.Button(bar, text="■ 停止监控", state="disabled")
+        btn_save = ttk.Button(bar, text="💾 保存规则")
+        btn_reset = ttk.Button(bar, text="↺ 恢复默认")
+        btn_start.pack(side="left", padx=4)
+        btn_stop.pack(side="left", padx=4)
+        btn_save.pack(side="left", padx=4)
+        btn_reset.pack(side="left", padx=4)
+        ttk.Label(bar, textvariable=self._pb_status, foreground="#b00020").pack(
+            side="left", padx=10)
+
+        # 主体：左右分栏
+        pane = ttk.PanedWindow(win, orient="horizontal")
+        pane.pack(fill="both", expand=True, padx=8, pady=6)
+
+        # 左：规则编辑（4 个标签页）
+        left = ttk.Notebook(pane)
+        rules = self._pb_load_rules()
+        editors = {}
+        tabs = [
+            ("目录黑名单", "folder_black.txt", "folder_black"),
+            ("签名黑名单", "sign_black.txt", "sign_black"),
+            ("目录白名单", "folder_white.txt", "folder_white"),
+            ("签名白名单", "sign_white.txt", "sign_white"),
+        ]
+        for title, fname, key in tabs:
+            frm = ttk.Frame(left)
+            left.add(frm, text=title)
+            txt = tk.Text(frm, wrap="word", font=("Microsoft YaHei UI", 10),
+                          undo=True)
+            txt.pack(fill="both", expand=True, padx=4, pady=4)
+            txt.insert("1.0", "\n".join(rules.get(key, [])))
+            editors[key] = txt
+        pane.add(left, weight=1)
+
+        # 右：拦截记录
+        right = ttk.LabelFrame(pane, text="拦截记录", padding=4)
+        logw = tk.Text(right, wrap="word", font=("Consolas", 9),
+                       state="disabled", foreground="#222")
+        logw.pack(fill="both", expand=True, padx=4, pady=(0, 4))
+        ttk.Button(right, text="清空记录",
+                   command=lambda: (logw.configure(state="normal"),
+                                    logw.delete("1.0", "end"),
+                                    logw.configure(state="disabled"))).pack(anchor="e", padx=4, pady=(0, 4))
+        pane.add(right, weight=1)
+
+        # ---- 行为 ----
+        def do_save():
+            new_rules = {key: editors[key].get("1.0", "end").splitlines() for _, _, key in tabs}
+            new_rules = {k: [ln.strip() for ln in v if ln.strip()
+                             and not ln.strip().startswith("#")] for k, v in new_rules.items()}
+            self._pb_save_rules(new_rules)
+            self._pb_log(logw, "[规则已保存]")
+            self._log("[进程拦截] 规则已保存")
+
+        def do_reset():
+            self._pb_save_rules({
+                "folder_black": self._PB_DEFAULT_FOLDER_BLACK,
+                "sign_black": self._PB_DEFAULT_SIGN_BLACK,
+                "folder_white": [],
+                "sign_white": [],
+            })
+            for _, _, key in tabs:
+                editors[key].delete("1.0", "end")
+                editors[key].insert("1.0", "\n".join(self._pb_load_rules().get(key, [])))
+            self._pb_log(logw, "[已恢复 block-ads 默认规则]")
+
+        def do_start():
+            if getattr(self, "_pb_running", False):
+                return
+            self._pb_running = True
+            self._pb_company = {}
+            btn_start.configure(state="disabled")
+            btn_stop.configure(state="normal")
+            self._pb_status.set("监控中…")
+            self._pb_log(logw, "[监控已启动]")
+            t = threading.Thread(target=self._pb_monitor_loop,
+                                 args=(logw, self._pb_status), daemon=True)
+            self._pb_thread = t
+            t.start()
+
+        def do_stop():
+            self._pb_running = False
+            btn_start.configure(state="normal")
+            btn_stop.configure(state="disabled")
+            self._pb_status.set("已停止")
+            self._pb_log(logw, "[监控已停止]")
+
+        btn_start.configure(command=do_start)
+        btn_stop.configure(command=do_stop)
+        btn_save.configure(command=do_save)
+        btn_reset.configure(command=do_reset)
+
+        # 关闭窗口时若仍在监控，提示（不强制停止，让用户自行决定）
+        def on_close():
+            if getattr(self, "_pb_running", False):
+                self._pb_log(logw, "[窗口关闭，监控仍在后台运行；再次打开可停止]")
+            win.destroy()
+        win.protocol("WM_DELETE_WINDOW", on_close)
+
+        self._pb_log(logw, "[进程拦截已就绪] 点击“启动监控”开始按规则拦截运行中的程序。")
+
+
+
+
 def main():
     # 无界面模式：--scan 仅计算并打印占用（用于测试/命令行）
     if "--scan" in sys.argv:

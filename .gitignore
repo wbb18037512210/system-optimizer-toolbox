@@ -2,3 +2,6 @@ __pycache__/
 build/
 *.spec
 *.pyc
+
+# 运行时生成的进程拦截规则（可由内置默认重建）
+blockrules/
