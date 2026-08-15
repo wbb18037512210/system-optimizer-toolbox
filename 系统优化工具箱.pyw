@@ -1675,7 +1675,8 @@ class CleanerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("系统优化工具箱（管理员 · 全盘）")
-        self.root.geometry("1020x780")
+        self.root.geometry("1280x820")
+        self.root.minsize(960, 640)
         self.root.resizable(True, True)
         _apply_app_icon(self.root)
 
@@ -1876,43 +1877,45 @@ class CleanerApp:
                            font=("Microsoft YaHei UI", 9), fill="#e2e8f0", anchor="w")
 
         cv.bind("<Configure>", lambda e: draw())
+        # 关键修复：Canvas 不设 width 时，grid 拉伸的虚拟宽度不触发 <Configure>，
+        # 导致首次 render 永远空白。下一帧主动重绘一次。
+        cv.after(20, draw)
         cv.bind("<Button-1>", lambda e: command())
         cv.bind("<Enter>", lambda e: cv.configure(cursor="hand2"))
         cv.bind("<Leave>", lambda e: cv.configure(cursor=""))
         return cv
 
     def _build_tool_cards(self, parent):
-        """左栏：圆角彩色工具卡片网格（紧凑 2 列，wide 卡占整行）。"""
+        """左栏：圆角彩色工具卡片网格（紧凑 2 列等宽，无 columnspan 避免虚拟宽度坑）。"""
         grid = ttk.Frame(parent, style="Card.TFrame")
         grid.pack(fill="both", expand=True, padx=6, pady=6)
         for c in range(2):
             grid.columnconfigure(c, weight=1)
 
-        # (icon, title, subtitle, cfrom, cto, command, wide)
+        # (icon, title, subtitle, cfrom, cto, command)
         tools = [
-            ("⚡", "一键优化", "全自动维护 · 需管理员", (0x25, 0x63, 0xeb), (0x0e, 0xa5, 0xe9), self.open_optduck, True),
-            ("🛡", "进程拦截", "屏蔽广告/挖矿进程", (0x63, 0x66, 0xf1), (0x8b, 0x5c, 0xf6), self.open_process_block, False),
-            ("📦", "系统瘦身", "卸载预装应用", (0x0e, 0xa5, 0xe9), (0x06, 0xb6, 0xd4), self.open_debloat, False),
-            ("🧹", "深度清理", "残留注册表/驱动", (0x10, 0xb9, 0x81), (0x14, 0xb8, 0xa6), self.open_deep, False),
-            ("🔋", "电源方案", "高性能/节能切换", (0xf9, 0x73, 0x16), (0xef, 0x44, 0x44), self.open_power, False),
-            ("🎮", "GPU 配置", "独显直连/调度", (0xec, 0x48, 0x99), (0xf4, 0x3f, 0x5e), self.open_gpu, False),
-            ("🚀", "启动项", "开机加速", (0x0d, 0x94, 0x88), (0x0e, 0xa5, 0xe9), self.open_startup, False),
-            ("⚙", "系统设置", "高级/网络/DNS", (0x47, 0x55, 0x69), (0x64, 0x74, 0x8b), self.open_godmode, False),
-            ("🌐", "外部工具", "Win10 优化 / 360", (0x25, 0x63, 0xeb), (0x38, 0xbd, 0xf8), self.open_external_tools, False),
-            ("🖥", "系统工具", "控制面板等 9 项", (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools, False),
-            ("📄", "导出报告", "导出扫描结果", (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report, False),
+            ("⚡", "一键优化", "全自动维护 · 需管理员", (0x25, 0x63, 0xeb), (0x0e, 0xa5, 0xe9), self.open_optduck),
+            ("🛡", "进程拦截", "屏蔽广告/挖矿进程", (0x63, 0x66, 0xf1), (0x8b, 0x5c, 0xf6), self.open_process_block),
+            ("📦", "系统瘦身", "卸载预装应用", (0x0e, 0xa5, 0xe9), (0x06, 0xb6, 0xd4), self.open_debloat),
+            ("🧹", "深度清理", "残留注册表/驱动", (0x10, 0xb9, 0x81), (0x14, 0xb8, 0xa6), self.open_deep),
+            ("🔋", "电源方案", "高性能/节能切换", (0xf9, 0x73, 0x16), (0xef, 0x44, 0x44), self.open_power),
+            ("🎮", "GPU 配置", "独显直连/调度", (0xec, 0x48, 0x99), (0xf4, 0x3f, 0x5e), self.open_gpu),
+            ("🚀", "启动项", "开机加速", (0x0d, 0x94, 0x88), (0x0e, 0xa5, 0xe9), self.open_startup),
+            ("⚙", "系统设置", "高级/网络/DNS", (0x47, 0x55, 0x69), (0x64, 0x74, 0x8b), self.open_godmode),
+            ("🌐", "外部工具", "Win10 优化 / 360", (0x25, 0x63, 0xeb), (0x38, 0xbd, 0xf8), self.open_external_tools),
+            ("🖥", "系统工具", "控制面板等 9 项", (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools),
+            ("📄", "导出报告", "导出扫描结果", (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report),
         ]
-        # 流式布局：wide 卡占满 2 列（整行），普通卡占 1 列
+        # 流式布局（全部 1 列等宽，避免 columnspan 引起的 Canvas 虚拟宽度不触发 Configure 陷阱）
         COLS = 2
         r, c = 0, 0
-        for icon, title, subtitle, cfrom, cto, cmd, wide in tools:
-            span = 2 if wide else 1
-            if c + span > COLS:        # 当前行放不下，换行
+        for icon, title, subtitle, cfrom, cto, cmd in tools:
+            if c + 1 > COLS:
                 r += 1
                 c = 0
-            card = self._make_tool_card(grid, icon, title, subtitle, cfrom, cto, cmd, wide)
-            card.grid(row=r, column=c, columnspan=span, padx=4, pady=4, sticky="ew")
-            c += span
+            card = self._make_tool_card(grid, icon, title, subtitle, cfrom, cto, cmd)
+            card.grid(row=r, column=c, padx=4, pady=4, sticky="ew")
+            c += 1
             if c >= COLS:
                 r += 1
                 c = 0
