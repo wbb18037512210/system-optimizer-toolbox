@@ -1849,12 +1849,16 @@ class CleanerApp:
         return tuple(min(255, v + amt) for v in c)
 
     def _make_tool_card(self, parent, icon, title, subtitle, cfrom, cto, command, wide=False):
-        """创建圆角彩色工具卡片（Canvas 自适应列宽，重绘匹配宽度的渐变背景图）。
-        所有元素（emoji 字号、标题字号、副标题字号、文字 x/y）按卡片高度 h 等比例缩放，
-        改 h 即可整体缩放。"""
-        h = 90                                          # 加大卡片高度（原 68）
+        """创建圆角彩色工具卡片（Canvas 自适应列宽）。
+        所有视觉元素（emoji 字号、标题字号、副标题字号、文字 x/y 位置）按卡片实际宽度 w
+        等比例缩放（基准 REF_W=200，最小尺寸有下限保可读）。窗口拉宽/拉窄时卡片自动重绘。"""
+        h = 90
+        REF_W = 200                                       # 基准卡片宽度
         cv = tk.Canvas(parent, bd=0, highlightthickness=0, bg=self.COLOR_BG, height=h)
         cv._last_key = None
+        cv._bg_item = None
+        cv._img = None
+        cv._img_hi = None
 
         def draw():
             w = cv.winfo_width()
@@ -1865,32 +1869,52 @@ class CleanerApp:
                 return
             cv._last_key = key
             cv.delete("all")
+            cv._bg_item = None
+
             img = self._card_bg_image(w, h, cfrom, cto)
             if img is None:
                 cv.configure(bg="#%02x%02x%02x" % cto)
                 return
             cv._img = img
-            cv.create_image(0, 0, image=img, anchor="nw")
-            # —— 等比例缩放：所有尺寸都基于 h ——
-            emoji_size = max(14, int(h * 0.45))         # 图标 ≈ h/2
-            title_size = max(9,  int(h * 0.135))        # 标题
-            sub_size   = max(7,  int(h * 0.105))        # 副标题
-            emoji_x    = h * 0.30                       # 图标水平中心
-            text_x     = h * 0.55                       # 文字左对齐起点
-            cv.create_text(emoji_x, h / 2, text=icon,
+            cv._img_hi = self._card_bg_image(w, h, self._lighten(cfrom), self._lighten(cto))
+            bg = cv.create_image(0, 0, image=img, anchor="nw")
+            cv._bg_item = bg
+
+            # —— 等比例缩放：所有尺寸基于卡片实际宽度 w ——
+            r = w / REF_W                                  # 缩放比
+            emoji_size  = max(20, int(40 * r))             # ≈ h×0.45 @ REF_W
+            title_size  = max(9,  int(12 * r))
+            sub_size    = max(7,  int(9 * r))
+            icon_cx     = int(w * 0.16)                    # 图标水平中心
+            text_x      = int(w * 0.28)                    # 文字左对齐起点
+            cv.create_text(icon_cx, h / 2, text=icon,
                            font=("Segoe UI Emoji", emoji_size), fill="white", anchor="center")
-            cv.create_text(text_x, h * 0.38, text=title,
+            cv.create_text(text_x, h * 0.36, text=title,
                            font=("Microsoft YaHei UI", title_size, "bold"), fill="white", anchor="w")
-            cv.create_text(text_x, h * 0.66, text=subtitle,
+            cv.create_text(text_x, h * 0.68, text=subtitle,
                            font=("Microsoft YaHei UI", sub_size), fill="#e2e8f0", anchor="w")
+
+            # hover 状态：背景图换成亮色版（只换 background，文字图层不动）
+            def on_enter(e):
+                cv.configure(cursor="hand2")
+                if cv._img_hi is not None and cv._bg_item is not None:
+                    cv.itemconfig(cv._bg_item, image=cv._img_hi)
+
+            def on_leave(e):
+                cv.configure(cursor="")
+                if cv._img is not None and cv._bg_item is not None:
+                    cv.itemconfig(cv._bg_item, image=cv._img)
+
+            cv.bind("<Enter>", on_enter)
+            cv.bind("<Leave>", on_leave)
+            cv.tag_bind(bg, "<Enter>", on_enter)
+            cv.tag_bind(bg, "<Leave>", on_leave)
 
         cv.bind("<Configure>", lambda e: draw())
         # 关键修复：Canvas 不设 width 时，grid 拉伸的虚拟宽度不触发 <Configure>，
         # 导致首次 render 永远空白。下一帧主动重绘一次。
         cv.after(20, draw)
         cv.bind("<Button-1>", lambda e: command())
-        cv.bind("<Enter>", lambda e: cv.configure(cursor="hand2"))
-        cv.bind("<Leave>", lambda e: cv.configure(cursor=""))
         return cv
 
     def _build_tool_cards(self, parent):
