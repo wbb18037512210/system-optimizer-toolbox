@@ -1820,6 +1820,128 @@ class CleanerApp:
         self.COLOR_WARN = COLOR_WARN
         self.COLOR_DANGER = COLOR_DANGER
 
+    # ===== 圆角彩色卡片组件（PIL 生成圆角渐变背景 + Canvas 叠文字）=====
+    def _card_bg_image(self, w, h, cfrom, cto, radius=14):
+        """生成带透明圆角的垂直渐变背景图（PhotoImage），用于工具卡片。"""
+        try:
+            from PIL import Image, ImageDraw, ImageTk
+        except Exception:
+            return None
+        img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        dr = ImageDraw.Draw(img)
+        for y in range(h):
+            t = y / max(1, h - 1)
+            r = int(cfrom[0] * (1 - t) + cto[0] * t)
+            g = int(cfrom[1] * (1 - t) + cto[1] * t)
+            b = int(cfrom[2] * (1 - t) + cto[2] * t)
+            dr.line([(0, y), (w, y)], fill=(r, g, b, 255))
+        mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=255)
+        img.putalpha(mask)
+        try:
+            return ImageTk.PhotoImage(img)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _lighten(c, amt=22):
+        return tuple(min(255, v + amt) for v in c)
+
+    def _make_tool_card(self, parent, icon, title, subtitle, cfrom, cto, command, wide=False):
+        """创建圆角彩色工具卡片（Canvas 自适应列宽，重绘匹配宽度的渐变背景图）。"""
+        h = 68
+        cv = tk.Canvas(parent, bd=0, highlightthickness=0, bg=self.COLOR_BG, height=h)
+        cv._last_key = None
+
+        def draw():
+            w = cv.winfo_width()
+            if w <= 1:
+                return
+            key = (w, h)
+            if cv._last_key == key:
+                return
+            cv._last_key = key
+            cv.delete("all")
+            img = self._card_bg_image(w, h, cfrom, cto)
+            if img is None:
+                cv.configure(bg="#%02x%02x%02x" % cto)
+                return
+            cv._img = img
+            cv.create_image(0, 0, image=img, anchor="nw")
+            cv.create_text(min(26, w * 0.12), h / 2, text=icon,
+                           font=("Segoe UI Emoji", 24), fill="white", anchor="center")
+            cv.create_text(min(54, w * 0.22), h / 2 - 9, text=title,
+                           font=("Microsoft YaHei UI", 11, "bold"), fill="white", anchor="w")
+            cv.create_text(min(54, w * 0.22), h / 2 + 10, text=subtitle,
+                           font=("Microsoft YaHei UI", 9), fill="#e2e8f0", anchor="w")
+
+        cv.bind("<Configure>", lambda e: draw())
+        cv.bind("<Button-1>", lambda e: command())
+        cv.bind("<Enter>", lambda e: cv.configure(cursor="hand2"))
+        cv.bind("<Leave>", lambda e: cv.configure(cursor=""))
+        return cv
+
+    def _build_tool_cards(self, parent):
+        """主页上区：圆角彩色工具卡片网格（替代原 4 个 LabelFrame 横排）。"""
+        grid = ttk.Frame(parent, style="Card.TFrame")
+        grid.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 6))
+        for c in range(3):
+            grid.columnconfigure(c, weight=1)
+
+        # (icon, title, subtitle, cfrom, cto, command, wide)
+        tools = [
+            ("⚡", "一键优化", "全自动维护 · 需管理员", (0x25, 0x63, 0xeb), (0x0e, 0xa5, 0xe9), self.open_optduck, True),
+            ("🛡", "进程拦截", "屏蔽广告/挖矿进程", (0x63, 0x66, 0xf1), (0x8b, 0x5c, 0xf6), self.open_process_block, False),
+            ("📦", "系统瘦身", "卸载预装应用", (0x0e, 0xa5, 0xe9), (0x06, 0xb6, 0xd4), self.open_debloat, False),
+            ("🧹", "深度清理", "残留注册表/驱动", (0x10, 0xb9, 0x81), (0x14, 0xb8, 0xa6), self.open_deep, False),
+            ("🔋", "电源方案", "高性能/节能切换", (0xf9, 0x73, 0x16), (0xef, 0x44, 0x44), self.open_power, False),
+            ("🎮", "GPU 配置", "独显直连/调度", (0xec, 0x48, 0x99), (0xf4, 0x3f, 0x5e), self.open_gpu, False),
+            ("🚀", "启动项", "开机加速", (0x0d, 0x94, 0x88), (0x0e, 0xa5, 0xe9), self.open_startup, False),
+            ("⚙", "系统设置", "高级/网络/DNS", (0x47, 0x55, 0x69), (0x64, 0x74, 0x8b), self.open_godmode, False),
+            ("🌐", "外部工具", "Win10 优化 / 360", (0x25, 0x63, 0xeb), (0x38, 0xbd, 0xf8), self.open_external_tools, False),
+            ("🖥", "系统工具", "控制面板等 9 项", (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools, False),
+            ("📄", "导出报告", "导出扫描结果", (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report, False),
+        ]
+        # 行布局（wide 占 2 列，保证每行 3 列对齐）
+        rows = [
+            [tools[0], tools[1]],
+            [tools[2], tools[3], tools[4]],
+            [tools[5], tools[6], tools[7]],
+            [tools[8], tools[9], tools[10]],
+        ]
+        for ri, row in enumerate(rows):
+            col = 0
+            for t in row:
+                icon, title, subtitle, cfrom, cto, cmd, wide = t
+                card = self._make_tool_card(grid, icon, title, subtitle, cfrom, cto, cmd, wide)
+                card.grid(row=ri, column=col, columnspan=(2 if wide else 1), padx=4, pady=4, sticky="ew")
+                col += (2 if wide else 1)
+
+    def _build_cleanup_panel(self, parent):
+        """主页中区：可清理项目列表（占满全宽），沿用原 Treeview 逻辑。"""
+        panel = ttk.LabelFrame(parent, text="  🧹  可清理项目（勾选后点击扫描）",
+                               padding=10, style="Card.TLabelframe")
+        panel.grid(row=1, column=0, sticky="nsew", pady=(2, 4), padx=4)
+        self._build_cleanup_list_into(panel)
+        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
+        self._build_select_stats_into(panel)
+        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
+        self._build_action_buttons_into(panel)
+
+    def _add_title_bar(self, win, title, icon, color):
+        """给二级面板 Toplevel 加一条彩色渐变标题栏（替代系统灰标题），含关闭按钮。"""
+        bar = tk.Frame(win, bg="#%02x%02x%02x" % color, height=40)
+        bar.pack(fill="x")
+        bar.pack_propagate(False)
+        tk.Label(bar, text=icon, bg=bar["bg"], fg="white",
+                 font=("Segoe UI Emoji", 16)).pack(side="left", padx=(12, 6))
+        tk.Label(bar, text=title, bg=bar["bg"], fg="white",
+                 font=("Microsoft YaHei UI", 12, "bold")).pack(side="left")
+        close = tk.Label(bar, text="✕", bg=bar["bg"], fg="white",
+                         font=("Microsoft YaHei UI", 12), cursor="hand2")
+        close.pack(side="right", padx=12)
+        close.bind("<Button-1>", lambda e: win.destroy())
+
     # ---- UI 构建 ----
     def _build_ui(self):
         # 顶部：左侧 logo 圆角色块 + 标题/副标题（贴近参考图"全部工具"标题区）
@@ -1875,26 +1997,16 @@ class CleanerApp:
         # 底部 = 运行日志（全宽）
         main = ttk.Frame(self.root, padding=(10, 0, 10, 6))
         main.pack(fill="both", expand=True)
-        main.columnconfigure(0, weight=1, uniform="cols")
-        main.columnconfigure(1, weight=1, uniform="cols")
-        main.columnconfigure(2, weight=1, uniform="cols")
-        main.columnconfigure(3, weight=1, uniform="cols")
-        main.rowconfigure(0, weight=0)   # 顶部 4 分组：自然高度
+        main.columnconfigure(0, weight=1)
+        main.rowconfigure(0, weight=0)   # 工具卡片网格：自然高度
         main.rowconfigure(1, weight=1)   # 清理项目：弹性高度
         main.rowconfigure(2, weight=0)   # 日志：自然高度
 
         # 上：4 个功能区分组横排
-        self._build_tools_top_row(main)
+        self._build_tool_cards(main)
 
         # 中：清理项目（占满全宽）
-        panel = ttk.LabelFrame(main, text="可清理项目（勾选后点击扫描）", padding=10, style="Card.TLabelframe")
-        panel.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(6, 4), padx=4)
-        panel.columnconfigure(0, weight=1)
-        self._build_cleanup_list_into(panel)
-        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
-        self._build_select_stats_into(panel)
-        ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
-        self._build_action_buttons_into(panel)
+        self._build_cleanup_panel(main)
 
         # 下：运行日志（全宽）
         self._build_log_into(main)
@@ -2144,6 +2256,7 @@ class CleanerApp:
         win.geometry("720x600")
         win.transient(self.root)
         _apply_app_icon(win)
+        self._add_title_bar(win, "卸载 Windows 预装应用", "🧯", (0x0e, 0xa5, 0xe9))
 
         def _on_close():
             self._debloat_win = None
@@ -2420,6 +2533,7 @@ class CleanerApp:
         win.geometry("760x640")
         win.transient(self.root)
         _apply_app_icon(win)
+        self._add_title_bar(win, "Windows 深度优化", "🧹", (0x10, 0xb9, 0x81))
 
         def _on_close():
             self._deep_win = None
@@ -2590,6 +2704,7 @@ class CleanerApp:
         win.geometry("760x560")
         win.transient(self.root)
         _apply_app_icon(win)
+        self._add_title_bar(win, "电源/性能细项", "🔋", (0xf9, 0x73, 0x16))
 
         def _on_close():
             self._power_win = None
@@ -2757,6 +2872,7 @@ class CleanerApp:
         win.geometry("760x620")
         win.transient(self.root)
         _apply_app_icon(win)
+        self._add_title_bar(win, "GPU 优化", "🎮", (0xec, 0x48, 0x99))
 
         def _on_close():
             self._gpu_win = None
@@ -2997,6 +3113,7 @@ class CleanerApp:
         win.geometry("840x620")
         win.transient(self.root)
         _apply_app_icon(win)
+        self._add_title_bar(win, "启动项管理", "🚀", (0x0d, 0x94, 0x88))
 
         def _on_close():
             self._startup_win = None
@@ -3239,6 +3356,7 @@ class CleanerApp:
         win.geometry("780x640")
         win.transient(self.root)
         _apply_app_icon(win)
+        self._add_title_bar(win, "optimizerDuck 全功能优化", "🧩", (0x25, 0x63, 0xeb))
 
         def _on_close():
             self._optduck_win = None
@@ -4195,6 +4313,7 @@ class CleanerApp:
             win.iconbitmap(self._icon_path)
         except Exception:
             pass
+        self._add_title_bar(win, "进程拦截", "🛡", (0x63, 0x66, 0xf1))
 
         # 顶部工具栏
         bar = ttk.Frame(win, padding=(8, 6))
@@ -4303,6 +4422,52 @@ class CleanerApp:
         self._pb_log(logw, "[进程拦截已就绪] 点击“启动监控”开始按规则拦截运行中的程序。")
 
 
+
+
+    def open_external_tools(self):
+        """外部工具集合：Win10 优化、360 联网助手。"""
+        win = tk.Toplevel(self.root)
+        win.title("外部工具")
+        win.geometry("420x240")
+        win.transient(self.root)
+        try:
+            win.iconbitmap(self._icon_path)
+        except Exception:
+            pass
+        self._add_title_bar(win, "外部工具", "🌐", (0x25, 0x63, 0xeb))
+        body = ttk.Frame(win, padding=14, style="Card.TFrame")
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text="以下工具为第三方/独立脚本，点击后以独立窗口运行：",
+                  font=("Microsoft YaHei UI", 10), foreground=self.COLOR_TEXT2).pack(anchor="w", pady=(0, 10))
+        self._button_grid(body, [
+            ("🪟 Win10 优化版", self.launch_win10_optimizer),
+            ("🌐 360 联网助手", self.launch_net_assist),
+        ], per_row=1, width=24, style="TButton")
+
+    def open_systools(self):
+        """Windows 系统工具快捷入口集合。"""
+        win = tk.Toplevel(self.root)
+        win.title("系统工具")
+        win.geometry("460x340")
+        win.transient(self.root)
+        try:
+            win.iconbitmap(self._icon_path)
+        except Exception:
+            pass
+        self._add_title_bar(win, "系统工具", "🖥", (0x4f, 0x46, 0xe5))
+        body = ttk.Frame(win, padding=14, style="Card.TFrame")
+        body.pack(fill="both", expand=True)
+        self._button_grid(body, [
+            ("🎛 控制面板",   lambda: self._open_target("control.exe")),
+            ("📊 任务管理器", lambda: self._open_target("taskmgr.exe")),
+            ("🗑 卸载程序",   lambda: self._open_target("appwiz.cpl")),
+            ("🧹 磁盘清理",   lambda: self._open_target("cleanmgr.exe")),
+            ("📋 系统信息",   lambda: self._open_target("ms-settings:about")),
+            ("🔧 设备管理器", lambda: self._open_target("devmgmt.msc")),
+            ("💽 磁盘管理",   lambda: self._open_target("diskmgmt.msc")),
+            ("⚙ 服务",        lambda: self._open_target("services.msc")),
+            ("👑 上帝模式",   self.open_godmode),
+        ], per_row=2, width=18, style="TButton")
 
 
 def main():

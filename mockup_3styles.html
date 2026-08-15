@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>系统优化工具箱 · 美化方案对比</title>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --border: #e3e8f1;
+    --text: #1f2937;
+    --text2: #64748b;
+    --accent: #2563eb;
+    --accent2: #0f766e;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --header: #f1f5f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    font-family: "Microsoft YaHei UI", "PingFang SC", -apple-system, BlinkMacSystemFont, sans-serif;
+    background: linear-gradient(180deg, #eef2fb 0%, #f5f7fb 100%);
+    color: var(--text);
+  }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .lead { color: var(--text2); margin-bottom: 20px; font-size: 13px; }
+  .lead b { color: var(--accent); }
+
+  /* 三方案横向并排 */
+  .stage {
+    display: flex;
+    gap: 18px;
+    overflow-x: auto;
+    padding: 8px 4px 28px;
+    align-items: flex-start;
+  }
+  .proposal {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+    flex: 0 0 auto;
+  }
+  .proposal h2 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: #fff;
+    background: var(--accent2);
+  }
+  .badge.b { background: var(--accent); }
+  .badge.c { background: var(--warn); }
+  .sub { color: var(--text2); font-size: 11px; margin-bottom: 10px; line-height: 1.5; }
+  .viewport {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.02);
+  }
+
+  /* 缩放容器：把 1020x780 的桌面缩到 510x390，420x780 的手机缩到 290x540 */
+  .scale-wrap {
+    overflow: hidden;
+    width: 510px;
+    height: 390px;
+    border-radius: 10px;
+  }
+  .scale-wrap.tall { width: 290px; height: 540px; }
+  .scale-inner {
+    transform-origin: 0 0;
+  }
+  .scale-wrap .scale-inner { transform: scale(0.5); }
+  .scale-wrap.tall .scale-inner { transform: scale(0.69); }
+
+  /* ---------- 通用 ttk 等价物 ---------- */
+  .tk-frame { background: var(--bg); }
+  .tk-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+  }
+  .tk-card-title {
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+  .tk-row { display: flex; gap: 6px; align-items: center; }
+  .tk-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 11px;
+    border-radius: 5px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    cursor: default;
+    user-select: none;
+  }
+  .tk-btn.primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  .tk-btn.action {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+    font-weight: 700;
+  }
+  .tk-btn.opt {
+    background: #fff7ed;
+    color: #7c2d12;
+    border-color: #fed7aa;
+  }
+  .tk-list {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    overflow: hidden;
+  }
+  .tk-list-head {
+    background: var(--header);
+    color: #475569;
+    font-weight: 700;
+    display: grid;
+    grid-template-columns: 28px 1fr 80px 70px 60px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tk-list-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 80px 70px 60px;
+    padding: 4px 8px;
+    border-bottom: 1px solid #f1f5f9;
+    color: var(--text);
+  }
+  .tk-list-row.sel { background: #dbeafe; color: #1e3a8a; }
+  .tk-log {
+    background: #0f172a;
+    color: #cbd5e1;
+    font-family: Consolas, monospace;
+    font-size: 10px;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #1e293b;
+    line-height: 1.5;
+  }
+  .tk-badge {
+    display: inline-block;
+    background: var(--accent2);
+    color: #fff;
+    font-weight: 700;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* 顶部 logo */
+  .tk-topbar {
+    display: flex;
+    align-items: center;
+    padding: 8px 14px 6px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .tk-logo {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    margin-right: 10px;
+  }
+  .tk-title { font-size: 13px; font-weight: 700; }
+  .tk-subtitle { font-size: 9px; color: var(--text2); }
+
+  /* =================== 方案 A：桌面级卡片化 =================== */
+  .layout-A { width: 1020px; height: 780px; display: grid; grid-template-rows: 60px 1fr; }
+  .layout-A .body { display: grid; grid-template-columns: 280px 1fr; gap: 10px; padding: 10px; background: var(--bg); }
+  .layout-A .left { display: flex; flex-direction: column; gap: 10px; }
+  .layout-A .right { display: grid; grid-template-columns: 1fr; gap: 10px; }
+
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+  .tool-card {
+    border-radius: 12px;
+    padding: 14px 16px;
+    color: #fff;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .tool-card .icon {
+    width: 38px; height: 38px; border-radius: 9px;
+    background: rgba(255,255,255,0.22);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .tool-card .meta { line-height: 1.3; }
+  .tool-card .meta b { font-size: 13px; }
+  .tool-card .meta span { display: block; font-size: 10px; opacity: 0.85; }
+  .tool-card.wide { grid-column: span 2; background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%); }
+  .tool-card.c1 { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+  .tool-card.c2 { background: linear-gradient(135deg, #0ea5e9, #06b6d4); }
+  .tool-card.c3 { background: linear-gradient(135deg, #10b981, #14b8a6); }
+  .tool-card.c4 { background: linear-gradient(135deg, #f97316, #ef4444); }
+  .tool-card.c5 { background: linear-gradient(135deg, #ec4899, #f43f5e); }
+  .tool-card.c6 { background: linear-gradient(135deg, #8b5cf6, #d946ef); }
+  .tool-card.c7 { background: linear-gradient(135deg, #475569, #64748b); }
+  .tool-card.c8 { background: linear-gradient(135deg, #14b8a6, #2563eb); }
+
+  /* =================== 方案 B：完全复刻手机 =================== */
+  .layout-B { width: 420px; height: 780px; display: grid; grid-template-rows: 56px 1fr 56px; background: var(--bg); }
+  .layout-B .body { overflow: hidden; padding: 8px 12px 12px; }
+  .layout-B .bottom {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    align-items: center; border-top: 1px solid var(--border);
+    background: #fff;
+  }
+  .layout-B .tab {
+    text-align: center; font-size: 11px; color: var(--text2); padding: 8px 0;
+  }
+  .layout-B .tab.active { color: var(--accent); font-weight: 700; }
+  .layout-B .tab .ic { font-size: 18px; display: block; }
+  .layout-B .search-bar {
+    margin: 0 0 10px;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 4px;
+  }
+  .layout-B .search-bar b { font-size: 15px; }
+  .layout-B .search-bar .right { font-size: 11px; color: var(--text2); }
+  .layout-B .tools-mob {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .tool-mob {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 10px 8px;
+    border: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tool-mob .ic {
+    width: 30px; height: 30px; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 16px; flex-shrink: 0;
+  }
+  .tool-mob .t b { font-size: 11px; color: var(--text); display: block; }
+  .tool-mob .t span { font-size: 9px; color: var(--text2); }
+  .tool-mob.wide { grid-column: span 2; }
+  .ic.blue { background: linear-gradient(135deg, #2563eb, #38bdf8); }
+  .ic.purple { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+  .ic.green { background: linear-gradient(135deg, #10b981, #14b8a6); }
+  .ic.red { background: linear-gradient(135deg, #ef4444, #f97316); }
+  .ic.yellow { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+  .ic.pink { background: linear-gradient(135deg, #ec4899, #f43f5e); }
+  .ic.teal { background: linear-gradient(135deg, #0d9488, #06b6d4); }
+  .ic.gray { background: linear-gradient(135deg, #475569, #64748b); }
+
+  /* =================== 方案 C：微调升级 =================== */
+  .layout-C { width: 1020px; height: 780px; display: grid; grid-template-rows: 56px 1fr; }
+  .layout-C .body {
+    display: grid; grid-template-columns: 260px 1fr; gap: 8px;
+    padding: 10px; background: var(--bg);
+  }
+  .layout-C .rounded-btn {
+    border-radius: 18px;
+    padding: 6px 14px;
+  }
+
+  /* 决策表 */
+  .compare {
+    margin-top: 24px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 4px 16px rgba(15,23,42,0.05);
+  }
+  .compare h2 { font-size: 16px; margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--text2); font-weight: 600; background: var(--header); }
+  tr:last-child td { border-bottom: none; }
+  .ok { color: var(--accent2); font-weight: 700; }
+  .warn { color: var(--warn); font-weight: 700; }
+  .no { color: var(--danger); font-weight: 700; }
+
+  .footer-tip {
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #78350f;
+  }
+</style>
+</head>
+<body>
+
+<h1>系统优化工具箱 · 美化方案对比</h1>
+<p class="lead">
+  你提供的 3 张参考图（手机 APP「全部工具」浅色页 + 深色「编辑」页 + 大圆角彩色卡片）展示了理想的视觉风格。
+  下面是 <b>3 种改造方案</b> 的实物模拟，请对照参考图选择最贴近你期望的方向。
+</p>
+
+<div class="stage">
+
+  <!-- ============ 方案 A：桌面级卡片化 ============ -->
+  <div class="proposal">
+    <h2>方案 A · 桌面级卡片化 <span class="badge">推荐</span></h2>
+    <div class="sub">
+      保留 1020×780 桌面宽窗布局，主面板右侧工具区改成大圆角彩色卡片（每张配色不同），
+      左侧保留 4 个 LabelFrame 卡片化分组。沿用你已经做好的轻度美化（按钮/徽章/日志）。
+    </div>
+    <div class="viewport">
+      <div class="scale-wrap">
+        <div class="scale-inner layout-A">
+          <div class="tk-topbar">
+            <div class="tk-logo">🛠</div>
+            <div>
+              <div class="tk-title">系统优化工具箱</div>
+              <div class="tk-subtitle">一个轻巧、专注的 Windows 维护套件 · v3.0 美化版</div>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+              <span class="tk-badge">管理员 · 全盘</span>
+            </div>
+          </div>
+          <div class="body">
+            <!-- 左：4 个 LabelFrame 分组 -->
+            <div class="left">
+              <div class="tk-card">
+                <div class="tk-card-title">📦 系统清理</div>
+                <div class="tk-row" style="margin-bottom:6px;">
+                  <span class="tk-btn primary rounded-btn">▶ 扫描</span>
+                  <span class="tk-btn action rounded-btn">🧹 开始清理</span>
+                </div>
+                <div class="tk-list">
+                  <div class="tk-list-head"><span>☑</span><span>清理项</span><span>大小</span><span>文件</span><span>风险</span></div>
+                  <div class="tk-list-row sel"><span>☑</span><span>Windows 临时文件</span><span>2.1 GB</span><span>312</span><span>低</span></div>
+                  <div class="tk-list-row"><span>☑</span><span>Edge / Chrome 缓存</span><span>580 MB</span><span>1284</span><span>低</span></div>
+                  <div class="tk-list-row"><span>☐</span><span>QQ / 微信 文件</span><span>3.4 GB</span><span>820</span><span>高</span></div>
+                  <div class="tk-list-row"><span>☑</span><span>系统日志 / Dump</span><span>1.1 GB</span><span>34</span><span>中</span></div>
+                </div>
+              </div>
+              <div class="tk-card">
+                <div class="tk-card-title">🚀 启动项</div>
+                <div class="tk-list" style="font-size:10px;">
+                  <div class="tk-list-head"><span></span><span>名称</span><span>发布者</span><span>影响</span><span>状态</span></div>
+                  <div class="tk-list-row"><span>☑</span><span>OneDrive</span><span>Microsoft</span><span>中</span><span>已禁</span></div>
+                  <div class="tk-list-row"><span>☑</span><span>Spotify</span><span>Spotify AB</span><span>高</span><span>运行</span></div>
+                </div>
+              </div>
+            </div>
+            <!-- 右：工具卡片网格 -->
+            <div class="right">
+              <div class="tool-grid">
+                <div class="tool-card wide">
+                  <div class="icon">⚡</div>
+                  <div class="meta"><b>一键优化</b><span>扫描 + 清理 + 启动项 + 电源 · 全自动</span></div>
+                </div>
+                <div class="tool-card c1"><div class="icon">🛡</div><div class="meta"><b>进程拦截</b><span>屏蔽广告/挖矿进程</span></div></div>
+                <div class="tool-card c2"><div class="icon">📦</div><div class="meta"><b>系统瘦身</b><span>卸载预装应用</span></div></div>
+                <div class="tool-card c3"><div class="icon">🧹</div><div class="meta"><b>深度清理</b><span>残留注册表/驱动</span></div></div>
+                <div class="tool-card c4"><div class="icon">🔋</div><div class="meta"><b>电源方案</b><span>高性能/节能切换</span></div></div>
+                <div class="tool-card c5"><div class="icon">🎮</div><div class="meta"><b>GPU 配置</b><span>独显直连/调度</span></div></div>
+                <div class="tool-card c6"><div class="icon">🚀</div><div class="meta"><b>启动项</b><span>开机加速</span></div></div>
+                <div class="tool-card c8"><div class="icon">⚙</div><div class="meta"><b>系统设置</b><span>高级/网络/DNS</span></div></div>
+              </div>
+              <div class="tk-card" style="padding:8px 12px;">
+                <div class="tk-card-title" style="margin-bottom:4px;">📋 实时日志</div>
+                <div class="tk-log">
+                  [15:10:01] 扫描 Windows 临时文件 … 找到 312 个，可释放 2.1 GB<br>
+                  [15:10:04] 扫描 Edge / Chrome 缓存 … 找到 1284 个，可释放 580 MB<br>
+                  [15:10:07] 扫描 QQ / 微信文件 … 已跳过（高风险未勾选）
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 方案 B：完全复刻手机 ============ -->
+  <div class="proposal">
+    <h2>方案 B · 完全复刻手机 <span class="badge b">激进</span></h2>
+    <div class="sub">
+      改窗体为 420×780 窄窗，顶部「全部工具」标题 + 中央 2 列圆角彩色卡片网格 + 底部 3 tab。
+      视觉最贴近参考图，但所有二级面板、对话框、列表都要重做以适应窄窗。
+    </div>
+    <div class="viewport">
+      <div class="scale-wrap tall">
+        <div class="scale-inner layout-B">
+          <div class="tk-topbar" style="background:#fff;border-bottom:1px solid var(--border);">
+            <div class="tk-logo" style="background:#2563eb;">🛠</div>
+            <div>
+              <div class="tk-title">系统优化工具箱</div>
+              <div class="tk-subtitle">轻巧 · Windows 维护套件</div>
+            </div>
+            <div style="margin-left:auto;"><span class="tk-badge" style="font-size:9px;">管理员</span></div>
+          </div>
+          <div class="body">
+            <div class="search-bar">
+              <b>全部工具</b>
+              <span class="right">功能搜索 ›</span>
+            </div>
+            <div class="tools-mob">
+              <div class="tool-mob wide" style="background:linear-gradient(135deg,#2563eb,#0ea5e9);color:#fff;">
+                <div class="ic" style="background:rgba(255,255,255,0.25);">⚡</div>
+                <div class="t"><b style="color:#fff;">一键优化</b><span style="color:rgba(255,255,255,0.85);">全自动维护</span></div>
+              </div>
+              <div class="tool-mob"><div class="ic blue">🧹</div><div class="t"><b>系统清理</b><span>200 项</span></div></div>
+              <div class="tool-mob"><div class="ic purple">📦</div><div class="t"><b>系统瘦身</b><span>卸载预装</span></div></div>
+              <div class="tool-mob"><div class="ic green">🚀</div><div class="t"><b>启动项</b><span>开机加速</span></div></div>
+              <div class="tool-mob"><div class="ic red">🛡</div><div class="t"><b>进程拦截</b><span>广告屏蔽</span></div></div>
+              <div class="tool-mob"><div class="ic yellow">🎮</div><div class="t"><b>GPU</b><span>显卡调度</span></div></div>
+              <div class="tool-mob"><div class="ic pink">🔋</div><div class="t"><b>电源</b><span>高性能</span></div></div>
+              <div class="tool-mob"><div class="ic teal">⚙</div><div class="t"><b>设置</b><span>高级</span></div></div>
+            </div>
+          </div>
+          <div class="bottom">
+            <div class="tab active"><span class="ic">🏠</span>首页</div>
+            <div class="tab"><span class="ic">#</span>工具</div>
+            <div class="tab"><span class="ic">👤</span>我的</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 方案 C：微调升级 ============ -->
+  <div class="proposal">
+    <h2>方案 C · 微调升级 <span class="badge c">稳健</span></h2>
+    <div class="sub">
+      在你已经完成的 v3.0 轻度美化基础上，再做圆角按钮（PhotoImage 贴边）+ 大图标化分隔 + hover 动效。
+      改动小、风险低，但与参考图差距仍然较大。
+    </div>
+    <div class="viewport">
+      <div class="scale-wrap">
+        <div class="scale-inner layout-C">
+          <div class="tk-topbar">
+            <div class="tk-logo">🛠</div>
+            <div>
+              <div class="tk-title">系统优化工具箱</div>
+              <div class="tk-subtitle">一个轻巧、专注的 Windows 维护套件 · v3.1 微调版</div>
+            </div>
+            <div style="margin-left:auto;"><span class="tk-badge">管理员 · 全盘</span></div>
+          </div>
+          <div class="body">
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div class="tk-card">
+                <div class="tk-card-title">📦 系统清理</div>
+                <div class="tk-row" style="margin-bottom:6px;">
+                  <span class="tk-btn primary rounded-btn">▶ 扫描</span>
+                  <span class="tk-btn action rounded-btn">🧹 开始清理</span>
+                  <span class="tk-btn opt rounded-btn">⚡ 一键优化</span>
+                </div>
+                <div class="tk-list">
+                  <div class="tk-list-head"><span>☑</span><span>清理项</span><span>大小</span><span>文件</span><span>风险</span></div>
+                  <div class="tk-list-row sel"><span>☑</span><span>Windows 临时文件</span><span>2.1 GB</span><span>312</span><span>低</span></div>
+                  <div class="tk-list-row"><span>☑</span><span>Edge / Chrome 缓存</span><span>580 MB</span><span>1284</span><span>低</span></div>
+                </div>
+              </div>
+              <div class="tk-card">
+                <div class="tk-card-title">⚙ 工具箱</div>
+                <div class="tk-row" style="flex-wrap:wrap;gap:6px;">
+                  <span class="tk-btn rounded-btn">🛡 进程拦截</span>
+                  <span class="tk-btn rounded-btn">📦 系统瘦身</span>
+                  <span class="tk-btn rounded-btn">🧹 深度清理</span>
+                  <span class="tk-btn rounded-btn">🔋 电源方案</span>
+                  <span class="tk-btn rounded-btn">🎮 GPU 配置</span>
+                  <span class="tk-btn rounded-btn">🚀 启动项</span>
+                  <span class="tk-btn rounded-btn">⚙ 系统设置</span>
+                </div>
+              </div>
+            </div>
+            <div class="tk-card">
+              <div class="tk-card-title">📋 实时日志</div>
+              <div class="tk-log">
+                [15:10:01] 扫描 Windows 临时文件 … 找到 312 个，可释放 2.1 GB<br>
+                [15:10:04] 扫描 Edge / Chrome 缓存 … 找到 1284 个，可释放 580 MB
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="compare">
+  <h2>三方案决策对比</h2>
+  <table>
+    <tr><th>维度</th><th>A · 桌面级卡片化（推荐）</th><th>B · 完全复刻手机</th><th>C · 微调升级</th></tr>
+    <tr>
+      <td>视觉接近参考图</td>
+      <td><span class="ok">★★★★☆</span> 大圆角彩色卡片</td>
+      <td><span class="ok">★★★★★</span> 几乎 1:1</td>
+      <td><span class="warn">★★☆☆☆</span> 仍偏桌面</td>
+    </tr>
+    <tr>
+      <td>改造工作量</td>
+      <td><span class="warn">中等</span> 右侧工具卡片网格改造</td>
+      <td><span class="no">大</span> 全窗布局重做 + 二级面板适配</td>
+      <td><span class="ok">小</span> 仅样式细化</td>
+    </tr>
+    <tr>
+      <td>风险与稳定性</td>
+      <td><span class="ok">低</span> 主面板改、其余保留</td>
+      <td><span class="no">中</span> 改窗体尺寸影响所有面板</td>
+      <td><span class="ok">极低</span> 局部调整</td>
+    </tr>
+    <tr>
+      <td>鼠标键盘交互</td>
+      <td><span class="ok">保留桌面交互</span></td>
+      <td><span class="warn">触控优先、键盘可但偏窄</span></td>
+      <td><span class="ok">完全保留</span></td>
+    </tr>
+    <tr>
+      <td>二级面板</td>
+      <td><span class="ok">主面板 + 全部二级面板一起改造</span></td>
+      <td><span class="ok">同步改造</span></td>
+      <td><span class="warn">只动主面板</span></td>
+    </tr>
+    <tr>
+      <td>预计耗时</td>
+      <td>约 1-2 小时</td>
+      <td>约 3-5 小时</td>
+      <td>约 20-40 分钟</td>
+    </tr>
+  </table>
+  <div class="footer-tip">
+    💡 你之前选择了「主面板 + 全部二级面板一起」，所以方案 A 与 B 都满足这一点。
+    我的建议是 <b>方案 A</b>：既保留桌面工具箱的高密度信息呈现，又通过大圆角彩色卡片网格让视觉效果逼近参考图。
+    如果你坚持要手机壳（方案 B），我也可以做，只是会牺牲列表密度。
+  </div>
+</div>
+
+</body>
+</html>
