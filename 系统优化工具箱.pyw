@@ -1882,10 +1882,10 @@ class CleanerApp:
         return cv
 
     def _build_tool_cards(self, parent):
-        """主页上区：圆角彩色工具卡片网格（替代原 4 个 LabelFrame 横排）。"""
+        """左栏：圆角彩色工具卡片网格（紧凑 2 列，wide 卡占整行）。"""
         grid = ttk.Frame(parent, style="Card.TFrame")
-        grid.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 6))
-        for c in range(3):
+        grid.pack(fill="both", expand=True, padx=6, pady=6)
+        for c in range(2):
             grid.columnconfigure(c, weight=1)
 
         # (icon, title, subtitle, cfrom, cto, command, wide)
@@ -1902,26 +1902,26 @@ class CleanerApp:
             ("🖥", "系统工具", "控制面板等 9 项", (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools, False),
             ("📄", "导出报告", "导出扫描结果", (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report, False),
         ]
-        # 行布局（wide 占 2 列，保证每行 3 列对齐）
-        rows = [
-            [tools[0], tools[1]],
-            [tools[2], tools[3], tools[4]],
-            [tools[5], tools[6], tools[7]],
-            [tools[8], tools[9], tools[10]],
-        ]
-        for ri, row in enumerate(rows):
-            col = 0
-            for t in row:
-                icon, title, subtitle, cfrom, cto, cmd, wide = t
-                card = self._make_tool_card(grid, icon, title, subtitle, cfrom, cto, cmd, wide)
-                card.grid(row=ri, column=col, columnspan=(2 if wide else 1), padx=4, pady=4, sticky="ew")
-                col += (2 if wide else 1)
+        # 流式布局：wide 卡占满 2 列（整行），普通卡占 1 列
+        COLS = 2
+        r, c = 0, 0
+        for icon, title, subtitle, cfrom, cto, cmd, wide in tools:
+            span = 2 if wide else 1
+            if c + span > COLS:        # 当前行放不下，换行
+                r += 1
+                c = 0
+            card = self._make_tool_card(grid, icon, title, subtitle, cfrom, cto, cmd, wide)
+            card.grid(row=r, column=c, columnspan=span, padx=4, pady=4, sticky="ew")
+            c += span
+            if c >= COLS:
+                r += 1
+                c = 0
 
     def _build_cleanup_panel(self, parent):
         """主页中区：可清理项目列表（占满全宽），沿用原 Treeview 逻辑。"""
         panel = ttk.LabelFrame(parent, text="  🧹  可清理项目（勾选后点击扫描）",
                                padding=10, style="Card.TLabelframe")
-        panel.grid(row=1, column=0, sticky="nsew", pady=(2, 4), padx=4)
+        panel.grid(row=0, column=0, sticky="nsew", pady=(2, 4), padx=4)
         self._build_cleanup_list_into(panel)
         ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
         self._build_select_stats_into(panel)
@@ -1991,25 +1991,27 @@ class CleanerApp:
         # 细分割线，弱化但保留
         tk.Frame(self.root, bg=self.COLOR_BORDER, height=1).pack(fill="x", padx=14, pady=(2, 6))
 
-        # ---- 主体：上下分栏 ----
-        # 上半部分 = 4 个功能区分组（横向并排，每列 weight=1 弹性宽度）
-        # 下半部分 = 清理项目列表（占满全宽，主要交互区）
-        # 底部 = 运行日志（全宽）
+        # ---- 主体：左右分栏 ----
+        # 左栏（固定宽）= 圆角彩色工具卡片网格（紧凑 2 列）
+        # 右栏（弹性）  = 可清理项目面板（弹性高度）+ 运行日志（固定高度）
         main = ttk.Frame(self.root, padding=(10, 0, 10, 6))
         main.pack(fill="both", expand=True)
-        main.columnconfigure(0, weight=1)
-        main.rowconfigure(0, weight=0)   # 工具卡片网格：自然高度
-        main.rowconfigure(1, weight=1)   # 清理项目：弹性高度
-        main.rowconfigure(2, weight=0)   # 日志：自然高度
+        main.columnconfigure(0, weight=0, minsize=420)
+        main.columnconfigure(1, weight=1)
+        main.rowconfigure(0, weight=1)
 
-        # 上：4 个功能区分组横排
-        self._build_tool_cards(main)
+        # 左：工具卡片网格
+        left = ttk.Frame(main, style="Card.TFrame")
+        left.grid(row=0, column=0, sticky="nsew", padx=(4, 8))
+        self._build_tool_cards(left)
 
-        # 中：清理项目（占满全宽）
-        self._build_cleanup_panel(main)
-
-        # 下：运行日志（全宽）
-        self._build_log_into(main)
+        # 右：清理项目 + 日志（垂直分栏）
+        right = ttk.Frame(main)
+        right.grid(row=0, column=1, sticky="nsew")
+        right.rowconfigure(0, weight=1)   # 清理项目：弹性高度
+        right.rowconfigure(1, weight=0)   # 日志：自然高度
+        self._build_cleanup_panel(right)
+        self._build_log_into(right)
 
     # ---- 顶部一行：4 个功能区分组横向并排 ----
     def _build_tools_top_row(self, parent):
@@ -2167,7 +2169,7 @@ class CleanerApp:
     # ---- 底部：运行日志（全宽，卡片化 + 深色对比） ----
     def _build_log_into(self, parent):
         log_frame = ttk.LabelFrame(parent, text="  📜  运行日志", padding=8, style="Card.TLabelframe")
-        log_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0), padx=4)
+        log_frame.grid(row=1, column=0, sticky="ew", pady=(4, 0), padx=4)
 
         # 用一块 Frame 包裹 Text，模拟圆角（highlightthickness 留 1 像素浅深边框）
         wrap = tk.Frame(log_frame, bg="#0f172a",
