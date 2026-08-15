@@ -1849,8 +1849,10 @@ class CleanerApp:
         return tuple(min(255, v + amt) for v in c)
 
     def _make_tool_card(self, parent, icon, title, subtitle, cfrom, cto, command, wide=False):
-        """创建圆角彩色工具卡片（Canvas 自适应列宽，重绘匹配宽度的渐变背景图）。"""
-        h = 68
+        """创建圆角彩色工具卡片（Canvas 自适应列宽，重绘匹配宽度的渐变背景图）。
+        所有元素（emoji 字号、标题字号、副标题字号、文字 x/y）按卡片高度 h 等比例缩放，
+        改 h 即可整体缩放。"""
+        h = 90                                          # 加大卡片高度（原 68）
         cv = tk.Canvas(parent, bd=0, highlightthickness=0, bg=self.COLOR_BG, height=h)
         cv._last_key = None
 
@@ -1869,12 +1871,18 @@ class CleanerApp:
                 return
             cv._img = img
             cv.create_image(0, 0, image=img, anchor="nw")
-            cv.create_text(min(26, w * 0.12), h / 2, text=icon,
-                           font=("Segoe UI Emoji", 24), fill="white", anchor="center")
-            cv.create_text(min(54, w * 0.22), h / 2 - 9, text=title,
-                           font=("Microsoft YaHei UI", 11, "bold"), fill="white", anchor="w")
-            cv.create_text(min(54, w * 0.22), h / 2 + 10, text=subtitle,
-                           font=("Microsoft YaHei UI", 9), fill="#e2e8f0", anchor="w")
+            # —— 等比例缩放：所有尺寸都基于 h ——
+            emoji_size = max(14, int(h * 0.45))         # 图标 ≈ h/2
+            title_size = max(9,  int(h * 0.135))        # 标题
+            sub_size   = max(7,  int(h * 0.105))        # 副标题
+            emoji_x    = h * 0.30                       # 图标水平中心
+            text_x     = h * 0.55                       # 文字左对齐起点
+            cv.create_text(emoji_x, h / 2, text=icon,
+                           font=("Segoe UI Emoji", emoji_size), fill="white", anchor="center")
+            cv.create_text(text_x, h * 0.38, text=title,
+                           font=("Microsoft YaHei UI", title_size, "bold"), fill="white", anchor="w")
+            cv.create_text(text_x, h * 0.66, text=subtitle,
+                           font=("Microsoft YaHei UI", sub_size), fill="#e2e8f0", anchor="w")
 
         cv.bind("<Configure>", lambda e: draw())
         # 关键修复：Canvas 不设 width 时，grid 拉伸的虚拟宽度不触发 <Configure>，
