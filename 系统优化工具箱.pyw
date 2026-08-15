@@ -1684,20 +1684,190 @@ class CleanerApp:
         self.item_count = {}
         self.cleaning = False
 
+        # 统一的现代风格调色板：浅蓝灰底 + 白卡片 + 文字深灰 + 强调色
+        self._setup_styles()
+
         self._build_ui()
         self._refresh_admin_badge()
 
+    # ---- 统一 Style：浅蓝灰底 + 卡片化 + 强调色按钮 ----
+    def _setup_styles(self):
+        from tkinter import font as tkfont
+        # 全局配色
+        COLOR_BG       = "#f5f7fb"   # 整窗底色（浅蓝灰，模仿移动 App 浅背景）
+        COLOR_CARD     = "#ffffff"   # 卡片白
+        COLOR_BORDER   = "#e3e8f1"   # 卡片浅边框
+        COLOR_TEXT     = "#1f2937"   # 主文字深灰
+        COLOR_TEXT2    = "#64748b"   # 次级文字
+        COLOR_ACCENT   = "#2563eb"   # 主色蓝（操作类按钮）
+        COLOR_ACCENT2  = "#0f766e"   # 副色青绿（统计/勾选）
+        COLOR_WARN     = "#d97706"   # 警示橙（一键优化）
+        COLOR_DANGER   = "#dc2626"   # 危险红（清理）
+        COLOR_HEADER   = "#f1f5f9"   # 表头底
+
+        self.root.configure(bg=COLOR_BG)
+        # Windows 下若 DPI 缩放过，把默认字体也调一下，避免按钮文字偏小
+        try:
+            tkfont.nametofont("TkDefaultFont").configure(family="Microsoft YaHei UI", size=9)
+            tkfont.nametofont("TkTextFont").configure(family="Microsoft YaHei UI", size=9)
+        except Exception:
+            pass
+
+        ts = ttk.Style()
+        try:
+            ts.theme_use("vista")  # 用 vista 主题，更接近现代观感
+        except Exception:
+            pass
+
+        # Frame / LabelFrame 全部默认浅底
+        ts.configure(".", background=COLOR_BG, foreground=COLOR_TEXT)
+        ts.configure("TFrame", background=COLOR_BG)
+        ts.configure("Card.TFrame", background=COLOR_CARD)
+        ts.configure("TLabel", background=COLOR_BG, foreground=COLOR_TEXT, font=("Microsoft YaHei UI", 9))
+
+        # LabelFrame 当作卡片用：边框浅、内 padding 大、标题字号加大加粗深色
+        ts.configure("Card.TLabelframe", background=COLOR_CARD, bordercolor=COLOR_BORDER,
+                     lightcolor=COLOR_BORDER, darkcolor=COLOR_BORDER, relief="solid", borderwidth=1)
+        ts.configure("Card.TLabelframe.Label", background=COLOR_CARD, foreground=COLOR_TEXT,
+                     font=("Microsoft YaHei UI", 10, "bold"), padding=(2, 0))
+
+        # 普通按钮：白底浅边框 + hover/pressed
+        ts.configure("TButton",
+                     font=("Microsoft YaHei UI", 9),
+                     padding=(12, 6),
+                     foreground=COLOR_TEXT,
+                     background=COLOR_CARD,
+                     bordercolor=COLOR_BORDER,
+                     lightcolor=COLOR_CARD, darkcolor=COLOR_BORDER)
+        ts.map("TButton",
+               background=[("active", "#eef2fb"), ("pressed", "#e0e7f5"), ("disabled", "#f1f5f9")],
+               foreground=[("disabled", "#94a3b8")])
+
+        # 强调蓝色按钮（扫描 / 统计 / 管理员）
+        ts.configure("Primary.TButton",
+                     font=("Microsoft YaHei UI", 9, "bold"),
+                     padding=(14, 7),
+                     foreground="#ffffff",
+                     background=COLOR_ACCENT,
+                     bordercolor=COLOR_ACCENT,
+                     lightcolor=COLOR_ACCENT, darkcolor=COLOR_ACCENT)
+        ts.map("Primary.TButton",
+               background=[("active", "#1d4ed8"), ("pressed", "#1e40af"), ("disabled", "#93c5fd")],
+               foreground=[("disabled", "#f1f5f9")])
+
+        # 强调绿色（开始清理）
+        ts.configure("Action.TButton",
+                     font=("Microsoft YaHei UI", 9, "bold"),
+                     padding=(14, 7),
+                     foreground="#ffffff",
+                     background=COLOR_DANGER,
+                     bordercolor=COLOR_DANGER,
+                     lightcolor=COLOR_DANGER, darkcolor=COLOR_DANGER)
+        ts.map("Action.TButton",
+               background=[("active", "#b91c1c"), ("pressed", "#991b1b"), ("disabled", "#fca5a5")],
+               foreground=[("disabled", "#f1f5f9")])
+
+        # 一键优化橙色（高密度按钮）
+        ts.configure("Opt.TButton",
+                     font=("Microsoft YaHei UI", 9),
+                     padding=(10, 5),
+                     foreground="#7c2d12",
+                     background="#fff7ed",
+                     bordercolor="#fed7aa",
+                     lightcolor="#fff7ed", darkcolor="#fed7aa")
+        ts.map("Opt.TButton",
+               background=[("active", "#ffedd5"), ("pressed", "#fed7aa")],
+               foreground=[("active", COLOR_WARN)])
+
+        # 顶栏标签
+        ts.configure("Title.TLabel", font=("Microsoft YaHei UI", 15, "bold"),
+                     background=COLOR_BG, foreground=COLOR_TEXT)
+        ts.configure("Sub.TLabel",   font=("Microsoft YaHei UI", 9),
+                     background=COLOR_BG, foreground=COLOR_TEXT2)
+        ts.configure("Badge.TLabel", font=("Microsoft YaHei UI", 9, "bold"),
+                     background=COLOR_ACCENT2, foreground="#ffffff", padding=(6, 2))
+        ts.configure("Badge2.TLabel", font=("Microsoft YaHei UI", 9, "bold"),
+                     background=COLOR_WARN, foreground="#ffffff", padding=(6, 2))
+
+        # Treeview 表格美化：行高、表头配色、选中柔和绿
+        ts.configure("Cleanup.Treeview",
+                     font=("Microsoft YaHei UI", 9),
+                     rowheight=26,
+                     background=COLOR_CARD,
+                     fieldbackground=COLOR_CARD,
+                     foreground=COLOR_TEXT,
+                     bordercolor=COLOR_BORDER,
+                     lightcolor=COLOR_CARD, darkcolor=COLOR_CARD)
+        ts.configure("Cleanup.Treeview.Heading",
+                     font=("Microsoft YaHei UI", 9, "bold"),
+                     background=COLOR_HEADER,
+                     foreground="#475569",
+                     bordercolor=COLOR_BORDER,
+                     lightcolor=COLOR_HEADER, darkcolor=COLOR_HEADER,
+                     padding=(8, 6))
+        ts.map("Cleanup.Treeview",
+               background=[("selected", "#dbeafe")],
+               foreground=[("selected", "#1e3a8a")])
+
+        # 颜色常量挂到 self 上，方便日志框/_build_ui 其它处复用
+        self.COLOR_BG = COLOR_BG
+        self.COLOR_CARD = COLOR_CARD
+        self.COLOR_BORDER = COLOR_BORDER
+        self.COLOR_TEXT = COLOR_TEXT
+        self.COLOR_TEXT2 = COLOR_TEXT2
+        self.COLOR_ACCENT = COLOR_ACCENT
+        self.COLOR_ACCENT2 = COLOR_ACCENT2
+        self.COLOR_WARN = COLOR_WARN
+        self.COLOR_DANGER = COLOR_DANGER
+
     # ---- UI 构建 ----
     def _build_ui(self):
-        # 顶部标题 + 管理员徽标
-        top = ttk.Frame(self.root, padding=(10, 8, 10, 3))
-        top.pack(fill="x")
-        ttk.Label(top, text="🛠 系统优化工具箱", font=("Microsoft YaHei UI", 15, "bold")).pack(side="left")
-        self.admin_badge = ttk.Label(top, text="", font=("Microsoft YaHei UI", 9, "bold"))
-        self.admin_badge.pack(side="right")
+        # 顶部：左侧 logo 圆角色块 + 标题/副标题（贴近参考图"全部工具"标题区）
+        top = tk.Frame(self.root, bg=self.COLOR_BG)
+        top.pack(fill="x", padx=14, pady=(10, 4))
 
-        # 字体层级：分组标题 10pt 粗体，与标题(15pt)/正文(9pt)形成清晰层级
-        ttk.Style().configure("TLabelframe.Label", font=("Microsoft YaHei UI", 10, "bold"))
+        # 左侧 logo：用 Canvas 画一个圆角色块，里面放 emoji，模仿参考图图标
+        from PIL import ImageTk  # 复用已有依赖
+        # 不依赖 PIL，用纯 tk 文本画一个圆角色块
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            _logo_img = Image.new("RGBA", (44, 44), (37, 99, 235, 255))  # 主色蓝
+            _d = ImageDraw.Draw(_logo_img)
+            _d.ellipse((0, 0, 44, 44), fill=(37, 99, 235, 255))
+            _tk_logo = ImageTk.PhotoImage(_logo_img)
+        except Exception:
+            _tk_logo = None
+
+        logo_box = tk.Frame(top, bg=self.COLOR_BG)
+        logo_box.pack(side="left")
+        if _tk_logo is not None:
+            tk.Label(logo_box, image=_tk_logo, bg=self.COLOR_BG).pack(side="left")
+            self._logo_ref = _tk_logo  # 防止被 GC
+        else:
+            # 退化方案：用一块色块 + emoji
+            tk.Label(logo_box, text="🛠", font=("Segoe UI Emoji", 22),
+                     bg=self.COLOR_ACCENT, fg="#ffffff", width=2, height=1).pack(side="left", padx=(0, 2))
+
+        title_box = tk.Frame(top, bg=self.COLOR_BG)
+        title_box.pack(side="left", padx=(10, 0))
+        tk.Label(title_box, text="系统优化工具箱",
+                 font=("Microsoft YaHei UI", 16, "bold"),
+                 bg=self.COLOR_BG, fg=self.COLOR_TEXT).pack(anchor="w")
+        tk.Label(title_box, text="一个轻巧、专注的 Windows 维护套件 · v3.0 美化版",
+                 font=("Microsoft YaHei UI", 9),
+                 bg=self.COLOR_BG, fg=self.COLOR_TEXT2).pack(anchor="w")
+
+        # 右侧：管理员徽章 + 版本信息
+        right = tk.Frame(top, bg=self.COLOR_BG)
+        right.pack(side="right")
+        self.admin_badge = tk.Label(right, text="  ",
+                                    font=("Microsoft YaHei UI", 9, "bold"),
+                                    bg=self.COLOR_ACCENT2, fg="#ffffff",
+                                    padx=8, pady=2)
+        self.admin_badge.pack(side="right", anchor="e")
+
+        # 细分割线，弱化但保留
+        tk.Frame(self.root, bg=self.COLOR_BORDER, height=1).pack(fill="x", padx=14, pady=(2, 6))
 
         # ---- 主体：上下分栏 ----
         # 上半部分 = 4 个功能区分组（横向并排，每列 weight=1 弹性宽度）
@@ -1717,8 +1887,8 @@ class CleanerApp:
         self._build_tools_top_row(main)
 
         # 中：清理项目（占满全宽）
-        panel = ttk.LabelFrame(main, text="可清理项目（勾选后点击“扫描”）", padding=4)
-        panel.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(6, 4))
+        panel = ttk.LabelFrame(main, text="可清理项目（勾选后点击扫描）", padding=10, style="Card.TLabelframe")
+        panel.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(6, 4), padx=4)
         panel.columnconfigure(0, weight=1)
         self._build_cleanup_list_into(panel)
         ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
@@ -1732,107 +1902,112 @@ class CleanerApp:
     # ---- 顶部一行：4 个功能区分组横向并排 ----
     def _build_tools_top_row(self, parent):
         # 列 1：Windows 系统工具
-        g1 = ttk.LabelFrame(parent, text="🖥 Windows 系统工具", padding=5)
-        g1.grid(row=0, column=0, sticky="nsew", padx=(0, 3))
+        g1 = ttk.LabelFrame(parent, text="  🖥  Windows 系统工具", padding=10, style="Card.TLabelframe")
+        g1.grid(row=0, column=0, sticky="nsew", padx=(4, 3), pady=2)
         self._button_grid(g1, [
-            ("🎛 控制面板", lambda: self._open_target("control.exe")),
+            ("🎛 控制面板",   lambda: self._open_target("control.exe")),
             ("📊 任务管理器", lambda: self._open_target("taskmgr.exe")),
-            ("🗑 卸载程序", lambda: self._open_target("appwiz.cpl")),
-            ("🧹 磁盘清理", lambda: self._open_target("cleanmgr.exe")),
-            ("📋 系统信息", lambda: self._open_target("ms-settings:about")),
+            ("🗑 卸载程序",   lambda: self._open_target("appwiz.cpl")),
+            ("🧹 磁盘清理",   lambda: self._open_target("cleanmgr.exe")),
+            ("📋 系统信息",   lambda: self._open_target("ms-settings:about")),
             ("🔧 设备管理器", lambda: self._open_target("devmgmt.msc")),
-            ("💽 磁盘管理", lambda: self._open_target("diskmgmt.msc")),
-            ("⚙ 服务", lambda: self._open_target("services.msc")),
-            ("👑 上帝模式", self.open_godmode),
-        ], per_row=2, padx=4, pady_top=4, width=12)
+            ("💽 磁盘管理",   lambda: self._open_target("diskmgmt.msc")),
+            ("⚙ 服务",        lambda: self._open_target("services.msc")),
+            ("👑 上帝模式",   self.open_godmode),
+        ], per_row=2, padx=4, pady_top=4, width=12, style="TButton")
 
         # 列 2：优化与卸载面板
-        g2 = ttk.LabelFrame(parent, text="🧩 优化与卸载面板", padding=5)
-        g2.grid(row=0, column=1, sticky="nsew", padx=3)
+        g2 = ttk.LabelFrame(parent, text="  🧩  优化与卸载面板", padding=10, style="Card.TLabelframe")
+        g2.grid(row=0, column=1, sticky="nsew", padx=3, pady=2)
         self._button_grid(g2, [
-            ("🧯 卸载预装", self.open_debloat),
-            ("🛠 深度优化", self.open_deep),
-            ("🎮 GPU 优化", self.open_gpu),
+            ("🧯 卸载预装",  self.open_debloat),
+            ("🛠 深度优化",  self.open_deep),
+            ("🎮 GPU 优化",  self.open_gpu),
             ("⚡ 电源/性能", self.open_power),
-            ("🚀 启动项", self.open_startup),
+            ("🚀 启动项",    self.open_startup),
             ("🧩 Duck 全功能", self.open_optduck),
-        ], per_row=2, padx=4, pady_top=4, width=12)
+        ], per_row=2, padx=4, pady_top=4, width=12, style="TButton")
 
         # 列 3：外部工具
-        g3 = ttk.LabelFrame(parent, text="🌐 外部工具", padding=5)
-        g3.grid(row=0, column=2, sticky="nsew", padx=3)
+        g3 = ttk.LabelFrame(parent, text="  🌐  外部工具", padding=10, style="Card.TLabelframe")
+        g3.grid(row=0, column=2, sticky="nsew", padx=3, pady=2)
         self._button_grid(g3, [
-            ("🚀 Win10 优化", self.launch_win10_optimizer),
+            ("🚀 Win10 优化",   self.launch_win10_optimizer),
             ("🌐 360 联网助手", self.launch_net_assist),
-            ("🛡 进程拦截", self.open_process_block),
-        ], per_row=1, padx=4, pady_top=4, width=18)
+            ("🛡 进程拦截",     self.open_process_block),
+        ], per_row=1, padx=4, pady_top=4, width=18, style="TButton")
 
-        # 列 4：一键优化（需管理员 + 高危提示上移到分组顶部）
-        g4 = ttk.LabelFrame(parent, text="⚡ 一键优化（需管理员）", padding=5)
-        g4.grid(row=0, column=3, sticky="nsew", padx=(3, 0))
+        # 列 4：一键优化（橙色按钮强调高危）
+        g4 = ttk.LabelFrame(parent, text="  ⚡  一键优化（需管理员）", padding=10, style="Card.TLabelframe")
+        g4.grid(row=0, column=3, sticky="nsew", padx=(3, 4), pady=2)
         ttk.Label(
             g4,
             text="⚠ 高危：二次确认，全部可逆；非管理员触发 UAC。",
-            foreground="#b00020", font=("Microsoft YaHei UI", 8, "bold"),
+            foreground=self.COLOR_WARN, background=self.COLOR_CARD,
+            font=("Microsoft YaHei UI", 8, "bold"),
             wraplength=220, justify="left",
         ).pack(anchor="w", pady=(0, 4))
         self._button_grid(g4, [
-            ("🧹 DNS 缓存", self.opt_dns_flush),
-            ("🔋 高性能电源", self.opt_high_perf),
-            ("🏆 卓越电源", self.opt_ultimate_perf),
-            ("⚡ 快速启动", self.opt_fastboot_on),
+            ("🧹 DNS 缓存",     self.opt_dns_flush),
+            ("🔋 高性能电源",   self.opt_high_perf),
+            ("🏆 卓越电源",     self.opt_ultimate_perf),
+            ("⚡ 快速启动",     self.opt_fastboot_on),
             ("⚡ 禁用 SysMain", self.opt_sysmain_off),
-            ("📡 关传递优化", self.opt_dosvc_off),
-            ("🔎 关搜索索引", self.opt_search_off),
-            ("🎨 关透明动画", self.opt_visual_off),
-            ("📊 关遥测", self.opt_telemetry_off),
-            ("💤 关休眠", self.opt_hibernate_off),
-            ("🧱 关防火墙", self.opt_firewall_off),
-            ("🦠 关 Defender", self.opt_defender_off),
-            ("🔓 关 UAC", self.opt_uac_off),
-            ("🗑 关系统还原", self.opt_system_restore_off),
-            ("⬇ 关 Win 更新", self.opt_wu_off),
-        ], per_row=2, padx=2, pady_top=2, width=15)
+            ("📡 关传递优化",   self.opt_dosvc_off),
+            ("🔎 关搜索索引",   self.opt_search_off),
+            ("🎨 关透明动画",   self.opt_visual_off),
+            ("📊 关遥测",       self.opt_telemetry_off),
+            ("💤 关休眠",       self.opt_hibernate_off),
+            ("🧱 关防火墙",     self.opt_firewall_off),
+            ("🦠 关 Defender",  self.opt_defender_off),
+            ("🔓 关 UAC",       self.opt_uac_off),
+            ("🗑 关系统还原",   self.opt_system_restore_off),
+            ("⬇ 关 Win 更新",   self.opt_wu_off),
+        ], per_row=2, padx=2, pady_top=2, width=15, style="Opt.TButton")
 
     # ---- 按钮网格：每排 per_row 个，竖排 ----
-    def _button_grid(self, parent, buttons, per_row=2, padx=12, pady_top=8, width=None):
+    def _button_grid(self, parent, buttons, per_row=2, padx=12, pady_top=8, width=None, style="TButton"):
         for i in range(0, len(buttons), per_row):
-            row = ttk.Frame(parent)
+            row = ttk.Frame(parent, style="Card.TFrame")
             row.pack(fill="x", pady=(pady_top, 0))
             for label, command in buttons[i:i + per_row]:
-                btn = ttk.Button(row, text=label, command=command)
+                btn = ttk.Button(row, text=label, command=command, style=style)
                 if width:
                     btn.configure(width=width)
-                btn.pack(side="left", padx=padx)
+                btn.pack(side="left", padx=padx, expand=True, fill="x")
 
     # ---- 右侧（合并面板第一部分）：可清理项目列表 ----
     def _build_cleanup_list_into(self, parent):
-        # 紧凑样式：缩小字号与行高（Treeview 的 font 需经 Style 设置，不能直接传构造参数）
-        _ts = ttk.Style()
-        _ts.configure("Cleanup.Treeview", font=("Microsoft YaHei UI", 9), rowheight=20)
+        # 清理列表卡片：白底 + 圆角模拟（用 Frame 包一层 + highlightthickness）
+        list_box = tk.Frame(parent, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
+        list_box.pack(fill="x", pady=(2, 0))
 
-        list_box = ttk.Frame(parent)
-        list_box.pack(fill="x")
+        # 内部再加一层白底 + 浅边框，让 Treeview 看起来像在卡片里
+        inner = tk.Frame(list_box, bg=self.COLOR_CARD,
+                         highlightthickness=1, highlightbackground=self.COLOR_BORDER, bd=0)
+        inner.pack(fill="x", padx=2, pady=2)
+
         cols = ("check", "name", "detail", "size")
-        self.tree = ttk.Treeview(list_box, columns=cols, show="headings",
-                                 style="Cleanup.Treeview", height=12)
+        self.tree = ttk.Treeview(inner, columns=cols, show="headings",
+                                 style="Cleanup.Treeview", height=13)
         self.tree.heading("check", text="")
         self.tree.heading("name", text="项目")
         self.tree.heading("detail", text="位置")
         self.tree.heading("size", text="已占用")
-        self.tree.column("check", width=28, anchor="center", stretch=False)
+        self.tree.column("check", width=40, anchor="center", stretch=False)
         self.tree.column("name", width=200, stretch=False)
-        self.tree.column("detail", width=400, stretch=True)
+        self.tree.column("detail", width=420, stretch=True)
         self.tree.column("size", width=110, anchor="e", stretch=False)
         self.tree.grid(row=0, column=0, sticky="nsew")
-        vsb = ttk.Scrollbar(list_box, orient="vertical", command=self.tree.yview)
+        vsb = ttk.Scrollbar(inner, orient="vertical", command=self.tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=vsb.set)
-        list_box.columnconfigure(0, weight=1)
+        inner.columnconfigure(0, weight=1)
 
-        # 选中行背景改柔和薄荷绿，弱化原高饱和绿造成的“刺眼”感
-        self.tree.tag_configure("checked", background="#eef7f0")
-        self.tree.tag_configure("highrisk", foreground="#b00020")
+        # 标签：选中行柔和薄荷绿，高危深红；强制未选行也用白底（避免默认主题残留）
+        self.tree.tag_configure("checked", background="#dcfce7", foreground="#14532d")
+        self.tree.tag_configure("unchecked", background=self.COLOR_CARD, foreground=self.COLOR_TEXT)
+        self.tree.tag_configure("highrisk", foreground=self.COLOR_DANGER)
         for item in CLEAN_ITEMS:
             self.item_vars[item["id"]] = tk.BooleanVar(value=item["checked"])
             self.item_size[item["id"]] = 0
@@ -1841,44 +2016,59 @@ class CleanerApp:
             tags = []
             if item["checked"]:
                 tags.append("checked")
+            else:
+                tags.append("unchecked")
             if item["risk"] == "高":
                 tags.append("highrisk")
             self.tree.insert(
                 "", "end", iid=item["id"],
-                values=(mark, item["name"], _elide(item["detail"], 18), "未扫描"),
+                values=(mark, item["name"], _elide(item["detail"], 28), "未扫描"),
                 tags=tuple(tags)
             )
         self.tree.bind("<Button-1>", self._on_tree_click)
 
     # ---- 右侧（合并面板第二部分）：全选 / 统计 ----
     def _build_select_stats_into(self, parent):
-        f = ttk.Frame(parent)
+        f = ttk.Frame(parent, style="Card.TFrame")
         f.pack(fill="x")
-        sel = ttk.Frame(f)
+        sel = ttk.Frame(f, style="Card.TFrame")
         sel.pack(fill="x")
-        ttk.Button(sel, text="全选", command=lambda: self._set_all(True)).pack(side="left", padx=2)
-        ttk.Button(sel, text="全不选", command=lambda: self._set_all(False)).pack(side="left", padx=2)
-        ttk.Button(sel, text="仅低风险", command=self._only_low).pack(side="left", padx=2)
+        ttk.Button(sel, text="☑ 全选",   command=lambda: self._set_all(True),  style="TButton").pack(side="left", padx=2)
+        ttk.Button(sel, text="☐ 全不选", command=lambda: self._set_all(False), style="TButton").pack(side="left", padx=2)
+        ttk.Button(sel, text="✓ 仅低风险", command=self._only_low,            style="TButton").pack(side="left", padx=2)
         self.stat_var = tk.StringVar(value="已选占用：0 B ｜ 文件数：0")
         ttk.Label(f, textvariable=self.stat_var,
-                  font=("Microsoft YaHei UI", 9), foreground="#0a7c2f").pack(anchor="w", pady=(4, 0))
+                  font=("Microsoft YaHei UI", 9, "bold"),
+                  foreground=self.COLOR_ACCENT2, background=self.COLOR_CARD).pack(anchor="w", pady=(4, 0))
 
     # ---- 右侧（合并面板第三部分）：主操作按钮 ----
     def _build_action_buttons_into(self, parent):
-        inner = ttk.Frame(parent)
-        inner.pack(anchor="w")
-        self.btn_scan = ttk.Button(inner, text="🔍 扫描占用", command=self._scan)
+        inner = ttk.Frame(parent, style="Card.TFrame")
+        inner.pack(fill="x", anchor="w")
+        self.btn_scan = ttk.Button(inner, text="🔍  扫描占用",  command=self._scan,  style="Primary.TButton")
         self.btn_scan.pack(side="left", padx=5)
-        self.btn_clean = ttk.Button(inner, text="🚀 开始清理", command=self._ask_clean)
+        self.btn_clean = ttk.Button(inner, text="🚀  开始清理", command=self._ask_clean, style="Action.TButton")
         self.btn_clean.pack(side="left", padx=5)
         self.btn_export = ttk.Button(inner, text="📄 导出报告", command=self._export_report)
         self.btn_export.pack(side="left", padx=5)
 
-    # ---- 底部：运行日志（全宽）----
+    # ---- 底部：运行日志（全宽，卡片化 + 深色对比） ----
     def _build_log_into(self, parent):
-        log_frame = ttk.LabelFrame(parent, text="运行日志", padding=3)
-        log_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0))
-        self.log = scrolledtext.ScrolledText(log_frame, height=4, wrap="word", font=("Consolas", 9))
+        log_frame = ttk.LabelFrame(parent, text="  📜  运行日志", padding=8, style="Card.TLabelframe")
+        log_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0), padx=4)
+
+        # 用一块 Frame 包裹 Text，模拟圆角（highlightthickness 留 1 像素浅深边框）
+        wrap = tk.Frame(log_frame, bg="#0f172a",
+                        highlightthickness=1, highlightbackground="#1e293b", bd=0)
+        wrap.pack(fill="both", expand=True)
+        self.log = scrolledtext.ScrolledText(
+            wrap, height=5, wrap="word",
+            font=("Consolas", 9),
+            bg="#0f172a", fg="#e2e8f0",
+            insertbackground="#e2e8f0",
+            selectbackground="#2563eb", selectforeground="#ffffff",
+            relief="flat", bd=0, padx=10, pady=6,
+        )
         self.log.pack(fill="both", expand=True)
         self.log.configure(state="disabled")
 
@@ -3547,9 +3737,17 @@ class CleanerApp:
 
     def _refresh_admin_badge(self):
         if is_admin():
-            self.admin_badge.configure(text="🛡 已以管理员运行（最高权限）", foreground="#1b7a1b")
+            self.admin_badge.configure(
+                text="  🛡 已以管理员运行（最高权限）  ",
+                bg=self.COLOR_ACCENT2, fg="#ffffff",
+                font=("Microsoft YaHei UI", 9, "bold"),
+            )
         else:
-            self.admin_badge.configure(text="⚠ 普通权限（部分项无法清理）", foreground="#b00020")
+            self.admin_badge.configure(
+                text="  ⚠ 普通权限（部分项无法清理）  ",
+                bg=self.COLOR_DANGER, fg="#ffffff",
+                font=("Microsoft YaHei UI", 9, "bold"),
+            )
 
     def _on_tree_click(self, event):
         region = self.tree.identify("region", event.x, event.y)
