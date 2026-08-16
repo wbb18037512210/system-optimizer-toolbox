@@ -746,6 +746,65 @@ def compute_size(item):
     return total, count
 
 
+# ---- 清理安全模式（v5.0 回收站安全网）：recycle 回收站（默认）/ force 直删 / dry-run 模拟 ----
+CLEAN_MODE = "recycle"
+
+
+def _rm_recycle(path):
+    """用 SHFileOperationW 将文件/目录移入回收站（可还原）。成功返回 True。"""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class SHFILEOPSTRUCTW(ctypes.Structure):
+            _fields_ = [
+                ("hwnd", wintypes.HWND),
+                ("wFunc", wintypes.UINT),
+                ("pFrom", wintypes.LPCWSTR),
+                ("pTo", wintypes.LPCWSTR),
+                ("fFlags", wintypes.WORD),
+                ("fAnyOperationsAborted", wintypes.BOOL),
+                ("hNameMappings", wintypes.LPVOID),
+                ("lpszProgressTitle", wintypes.LPCWSTR),
+            ]
+
+        FO_DELETE = 0x0003
+        FOF_ALLOWUNDO = 0x0040        # 允许撤销 = 移入回收站
+        FOF_NOCONFIRMATION = 0x0010   # 不弹确认框
+        FOF_SILENT = 0x0004           # 不显示进度
+        FOF_NOERRORUI = 0x0400        # 不弹错误 UI
+
+        p_from = ctypes.create_unicode_buffer(path + "\x00", len(path) + 2)  # 双 null 结尾
+        op = SHFILEOPSTRUCTW()
+        op.hwnd = None
+        op.wFunc = FO_DELETE
+        op.pFrom = p_from
+        op.pTo = None
+        op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
+        op.fAnyOperationsAborted = False
+        op.hNameMappings = None
+        op.lpszProgressTitle = None
+        return ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op)) == 0
+    except Exception:
+        return False
+
+
+def _safe_delete(path):
+    """按全局清理模式删除路径。
+    recycle：优先移入回收站，失败回退直删；dry-run：不删（仅模拟）；force：直接删除。"""
+    mode = CLEAN_MODE
+    if mode == "dry-run":
+        return False
+    if mode == "recycle":
+        try:
+            if _rm_recycle(path):
+                return True
+        except Exception:
+            pass
+    _rm_path(path)
+    return True
+
+
 def _rm_path(path):
     """删除单个文件或目录，遇错跳过。"""
     try:
@@ -775,11 +834,11 @@ def clean_item(item):
                                 removed += 1
                             except Exception:
                                 pass
-                        shutil.rmtree(entry.path, ignore_errors=True)
+                        _safe_delete(entry.path)
                     else:
                         freed += entry.stat().st_size
                         removed += 1
-                        os.remove(entry.path)
+                        _safe_delete(entry.path)
                 except Exception:
                     continue
     elif t == "glob":
@@ -792,7 +851,7 @@ def clean_item(item):
                         if os.path.isfile(p):
                             freed += os.path.getsize(p)
                             removed += 1
-                            os.remove(p)
+                            _safe_delete(p)
                     except Exception:
                         pass
     elif t == "ext":
@@ -805,7 +864,7 @@ def clean_item(item):
                     if os.path.splitext(p)[1].lower() in exts:
                         freed += os.path.getsize(p)
                         removed += 1
-                        os.remove(p)
+                        _safe_delete(p)
                 except Exception:
                     pass
     elif t == "special":
@@ -1703,6 +1762,14 @@ THEME_DARK = {
     "opt_fg": "#fbbf24", "opt_bg": "#2b2410", "opt_border": "#5b4a16", "opt_active": "#3a2f14",
 }
 
+# ---- v5.0 设置中心：默认配置（持久化到 config/settings.json）----
+DEFAULT_SETTINGS = {
+    "theme": "light",                 # light / dark
+    "clean_mode": "recycle",          # recycle 回收站 / force 直删 / dry-run 仅模拟
+    "schedule": {"enabled": False, "hour": 12, "minute": 0},   # 每日定时自动清理
+    "last_run": "",                   # 上次定时清理时间戳（防同日重复）
+}
+
 
 class CleanerApp:
     def __init__(self, root):
@@ -1730,7 +1797,11 @@ class CleanerApp:
         self._mon_after = None
         self._mon_samples = []
         self._logo_ref = None
+        self.settings = dict(DEFAULT_SETTINGS)
+        self._sched_tick = None
 
+        # v5.0：先加载设置（主题/清理模式/计划任务），再构建界面
+        self._apply_settings()
         self._setup_styles()
         self._build_ui()
         self._refresh_admin_badge()
@@ -1906,24 +1977,24 @@ class CleanerApp:
         self._build_tool_cards(parent)
         self._build_monitor_widget(parent)
 
-    # ---- 健康分仪表盘（Canvas 圆环 + 动效）----
+    # ---- 健康分仪表盘（Canvas 大圆环 + 动效）----
     def _build_health_widget(self, parent):
         box = tk.Frame(parent, bg=self.COLOR_CARD,
                        highlightthickness=1, highlightbackground=self.COLOR_BORDER, bd=0)
         box.pack(fill="x", padx=6, pady=(6, 6))
         inner = tk.Frame(box, bg=self.COLOR_CARD)
-        inner.pack(fill="x", padx=10, pady=8)
-        self.health_cv = tk.Canvas(inner, width=78, height=78, bg=self.COLOR_CARD,
+        inner.pack(fill="x", padx=12, pady=8)
+        self.health_cv = tk.Canvas(inner, width=96, height=96, bg=self.COLOR_CARD,
                                    highlightthickness=0, bd=0)
         self.health_cv.pack(side="left")
         info = tk.Frame(inner, bg=self.COLOR_CARD)
-        info.pack(side="left", padx=(12, 0), fill="both", expand=True)
-        self.health_val = tk.Label(info, text="健康分 --", font=("Microsoft YaHei UI", 15, "bold"),
+        info.pack(side="left", padx=(14, 0), fill="both", expand=True)
+        self.health_val = tk.Label(info, text="健康分 --", font=("Microsoft YaHei UI", 17, "bold"),
                                    bg=self.COLOR_CARD, fg=self.COLOR_TEXT)
         self.health_val.pack(anchor="w")
         self.health_lvl = tk.Label(info, text="扫描后自动评估系统状态", font=("Microsoft YaHei UI", 9),
                                    bg=self.COLOR_CARD, fg=self.COLOR_TEXT2)
-        self.health_lvl.pack(anchor="w", pady=(3, 0))
+        self.health_lvl.pack(anchor="w", pady=(4, 0))
         tk.Label(info, text="垃圾越少 · 健康分越高", font=("Microsoft YaHei UI", 8),
                  bg=self.COLOR_CARD, fg=self.COLOR_TEXT2).pack(anchor="w", pady=(2, 0))
         self._gauge_color = "#10b981"
@@ -1933,18 +2004,18 @@ class CleanerApp:
         try:
             cv = self.health_cv
             cv.delete("all")
-            W = H = 78
-            cx, cy, R = W / 2, H / 2, 29
+            W = H = 96
+            cx, cy, R = W / 2, H / 2, 36
             start, span = 135, -270
             cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start, extent=span,
-                          style="arc", outline=self.T["gauge_track"], width=7)
+                          style="arc", outline=self.T["gauge_track"], width=8)
             col = getattr(self, "_gauge_color", "#10b981")
             cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start,
                           extent=span * max(0, min(100, score)) / 100.0,
-                          style="arc", outline=col, width=7)
-            cv.create_text(cx, cy - 3, text=str(score), font=("Microsoft YaHei UI", 14, "bold"),
+                          style="arc", outline=col, width=8)
+            cv.create_text(cx, cy - 4, text=str(score), font=("Microsoft YaHei UI", 18, "bold"),
                            fill=self.COLOR_TEXT)
-            cv.create_text(cx, cy + 15, text="健康分", font=("Microsoft YaHei UI", 8),
+            cv.create_text(cx, cy + 18, text="健康分", font=("Microsoft YaHei UI", 9),
                            fill=self.COLOR_TEXT2)
         except Exception:
             pass
@@ -1998,6 +2069,68 @@ class CleanerApp:
             pass
         self._update_status_bar()
 
+    # ================= v5.0 仪表盘：三环资源条 + 清理历史 =================
+    def _gauge_draw(self, cv, pct, color):
+        """画一个 40px 迷你圆环（用于 CPU/RAM/磁盘）。"""
+        try:
+            cv.delete("all")
+            W = H = 40
+            cx, cy, R = W / 2, H / 2, 15
+            start, span = 135, -270
+            cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start, extent=span,
+                          style="arc", outline=self.T["gauge_track"], width=5)
+            cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start,
+                          extent=span * max(0.0, min(100.0, pct)) / 100.0,
+                          style="arc", outline=color, width=5)
+            cv.create_text(cx, cy, text=f"{pct:.0f}", font=("Consolas", 9, "bold"),
+                           fill=self.COLOR_TEXT)
+        except Exception:
+            pass
+
+    def _gauge_update(self):
+        """刷新 CPU / RAM / 磁盘三环。"""
+        try:
+            cpu = self._mon_samples[-1][0] if self._mon_samples else 0.0
+            ram = _ram_percent()
+            disk = _disk_usage_pct()
+            self._gauge_draw(self._gauge_cvs["cpu"], cpu, self.COLOR_ACCENT)
+            self._gauge_draw(self._gauge_cvs["ram"], ram, self.COLOR_ACCENT2)
+            self._gauge_draw(self._gauge_cvs["disk"], disk, self.COLOR_WARN)
+            self._gauge_lbls["cpu"].configure(text=f"CPU {cpu:.0f}%")
+            self._gauge_lbls["ram"].configure(text=f"内存 {ram:.0f}%")
+            self._gauge_lbls["disk"].configure(text=f"磁盘 {disk:.0f}%")
+        except Exception:
+            pass
+
+    def _hist_draw(self):
+        """近 10 次清理迷你柱状图（数据来自 stats/history.json）。"""
+        try:
+            cv = self.hist_cv
+            cv.delete("all")
+            w = cv.winfo_width()
+            if w <= 1:
+                w = 380
+            h = 46
+            recent = self._load_stats()[-10:]
+            if not recent:
+                cv.create_text(w / 2, h / 2, text="暂无清理记录", fill=self.COLOR_TEXT2,
+                               font=("Microsoft YaHei UI", 8))
+                return
+            mx = max(max(s.get("freed_mb", 0) for s in recent), 1)
+            n = len(recent)
+            bw = max(6, min(22, (w - 16) / n - 4))
+            gap = 4
+            x0 = (w - n * (bw + gap)) / 2 + gap / 2
+            for i, s in enumerate(recent):
+                bh = max(3, (h - 14) * s.get("freed_mb", 0) / mx)
+                x = x0 + i * (bw + gap)
+                cv.create_rectangle(x, h - 6 - bh, x + bw, h - 6,
+                                    fill=self.COLOR_ACCENT, outline="")
+            cv.create_text(w / 2, 8, text="📊 近 10 次清理（MB）", fill=self.COLOR_TEXT2,
+                           font=("Microsoft YaHei UI", 8))
+        except Exception:
+            pass
+
     # ================= v4.0 智能版：实时资源监控 =================
     def _build_monitor_widget(self, parent):
         try:
@@ -2009,18 +2142,34 @@ class CleanerApp:
         box = tk.Frame(parent, bg=self.COLOR_CARD,
                        highlightthickness=1, highlightbackground=self.COLOR_BORDER, bd=0)
         box.pack(fill="x", padx=6, pady=(0, 6))
-        row = tk.Frame(box, bg=self.COLOR_CARD)
-        row.pack(fill="x", padx=10, pady=(6, 0))
-        self.mon_cpu_var = tk.StringVar(value="CPU --%")
-        self.mon_ram_var = tk.StringVar(value="RAM --%")
-        tk.Label(row, textvariable=self.mon_cpu_var, bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
-                 font=("Microsoft YaHei UI", 9, "bold")).pack(side="left")
-        tk.Label(row, textvariable=self.mon_ram_var, bg=self.COLOR_CARD, fg=self.COLOR_ACCENT2,
-                 font=("Microsoft YaHei UI", 9, "bold")).pack(side="left", padx=(14, 0))
-        tk.Label(row, text="实时监控", bg=self.COLOR_CARD, fg=self.COLOR_TEXT2,
-                 font=("Microsoft YaHei UI", 8)).pack(side="right")
-        self.mon_cv = tk.Canvas(box, height=36, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
-        self.mon_cv.pack(fill="x", padx=6, pady=(2, 5))
+
+        # 三环资源条：CPU / RAM / 磁盘
+        gauges = tk.Frame(box, bg=self.COLOR_CARD)
+        gauges.pack(fill="x", padx=8, pady=(6, 2))
+        self._gauge_cvs = {}
+        self._gauge_lbls = {}
+        for key, color in (("cpu", self.COLOR_ACCENT), ("ram", self.COLOR_ACCENT2),
+                           ("disk", self.COLOR_WARN)):
+            cell = tk.Frame(gauges, bg=self.COLOR_CARD)
+            cell.pack(side="left", expand=True, fill="x")
+            cv = tk.Canvas(cell, width=40, height=40, bg=self.COLOR_CARD,
+                           highlightthickness=0, bd=0)
+            cv.pack(side="top")
+            lbl = tk.Label(cell, text="--%", bg=self.COLOR_CARD, fg=self.COLOR_TEXT2,
+                           font=("Microsoft YaHei UI", 8))
+            lbl.pack(side="top")
+            self._gauge_cvs[key] = cv
+            self._gauge_lbls[key] = lbl
+            self._gauge_draw(cv, 0, color)
+
+        # 历史迷你柱
+        self.hist_cv = tk.Canvas(box, height=46, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
+        self.hist_cv.pack(fill="x", padx=6, pady=(2, 2))
+
+        # 底部 sparkline
+        self.mon_cv = tk.Canvas(box, height=32, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
+        self.mon_cv.pack(fill="x", padx=6, pady=(0, 5))
+        self._hist_draw()
         self._mon_tick()
 
     def _mon_tick(self):
@@ -2033,8 +2182,7 @@ class CleanerApp:
         if len(self._mon_samples) > 40:
             self._mon_samples.pop(0)
         try:
-            self.mon_cpu_var.set(f"CPU {cpu:.0f}%")
-            self.mon_ram_var.set(f"RAM {ram:.0f}%")
+            self._gauge_update()
             self._mon_draw()
         except Exception:
             pass
@@ -2087,6 +2235,292 @@ class CleanerApp:
                      f"清理 {len(sessions)} 次 ｜ 权限：{perm}")
         except Exception:
             pass
+
+    # ================= v5.0 设置中心：配置持久化 =================
+    def _settings_path(self):
+        return os.path.join(self._data_dir("config"), "settings.json")
+
+    def _load_settings(self):
+        """读取 settings.json 并与默认值合并（缺失键用默认）。"""
+        try:
+            import json
+            if os.path.exists(self._settings_path()):
+                with open(self._settings_path(), "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                merged = dict(DEFAULT_SETTINGS)
+                merged.update(data)
+                if isinstance(merged.get("schedule"), dict):
+                    s = dict(DEFAULT_SETTINGS["schedule"])
+                    s.update(merged["schedule"])
+                    merged["schedule"] = s
+                return merged
+        except Exception:
+            pass
+        return dict(DEFAULT_SETTINGS)
+
+    def _save_settings(self):
+        try:
+            import json
+            with open(self._settings_path(), "w", encoding="utf-8") as f:
+                json.dump(self.settings, f, ensure_ascii=False, indent=1)
+        except Exception:
+            pass
+
+    def _apply_settings(self):
+        """把设置应用到运行态：主题 / 清理模式 / 定时器。"""
+        self.settings = self._load_settings()
+        # 主题
+        if self.settings.get("theme") == "dark" and self.theme_name != "dark":
+            self.theme_name = "dark"
+            self.T = THEME_DARK
+        # 清理安全模式（全局变量）
+        global CLEAN_MODE
+        CLEAN_MODE = self.settings.get("clean_mode", "recycle")
+        if CLEAN_MODE not in ("recycle", "force", "dry-run"):
+            CLEAN_MODE = "recycle"
+        # 启动每日定时清理调度器（UI 构建完成后延迟启动，每分钟检查一次）
+        try:
+            if self._sched_tick:
+                self.root.after_cancel(self._sched_tick)
+        except Exception:
+            pass
+        self._sched_tick = self.root.after(15000, self._sched_check)
+
+    def _sched_check(self):
+        """计划任务：命中设置时间且当日未执行 → 自动低风险清理。"""
+        try:
+            import datetime
+            sched = self.settings.get("schedule", {})
+            if sched.get("enabled"):
+                now = datetime.datetime.now()
+                if now.hour == int(sched.get("hour", 12)) and now.minute == int(sched.get("minute", 0)):
+                    today = now.strftime("%Y-%m-%d")
+                    if self.settings.get("last_run") != today:
+                        self.settings["last_run"] = today
+                        self._save_settings()
+                        self._log(f"⏱ 计划任务触发：每日自动清理（{today}）", "head")
+                        self._smart_clean()
+        except Exception:
+            pass
+        try:
+            self._sched_tick = self.root.after(30000, self._sched_check)
+        except Exception:
+            self._sched_tick = None
+
+    def open_settings(self):
+        """设置中心：主题 / 清理模式 / 每日计划任务。"""
+        win = tk.Toplevel(self.root)
+        self._add_title_bar(win, "设置中心", "⚙️", (0x47, 0x55, 0x69))
+        win.title("设置中心")
+        win.geometry("560x520")
+        win.transient(self.root)
+        try:
+            win.iconbitmap(self._icon_path)
+        except Exception:
+            pass
+        body = ttk.Frame(win, padding=14)
+        body.pack(fill="both", expand=True)
+
+        def group(title):
+            f = ttk.LabelFrame(body, text=f"  {title}  ", padding=10, style="Card.TLabelframe")
+            f.pack(fill="x", pady=(0, 12))
+            return f
+
+        # ---- 主题 ----
+        g = group("🎨 界面主题")
+        self._set_theme_var = tk.StringVar(value=self.theme_name)
+        ttk.Radiobutton(g, text="浅色「晴空」", value="light",
+                        variable=self._set_theme_var).pack(anchor="w", pady=2)
+        ttk.Radiobutton(g, text="深色「深空驾驶舱」", value="dark",
+                        variable=self._set_theme_var).pack(anchor="w", pady=2)
+
+        # ---- 清理安全模式 ----
+        g = group("🛡 清理安全模式")
+        self._set_mode_var = tk.StringVar(value=CLEAN_MODE)
+        ttk.Radiobutton(g, text="移入回收站（推荐 · 可还原，误删零风险）", value="recycle",
+                        variable=self._set_mode_var).pack(anchor="w", pady=2)
+        ttk.Radiobutton(g, text="直接删除（释放更彻底，不可恢复）", value="force",
+                        variable=self._set_mode_var).pack(anchor="w", pady=2)
+        ttk.Radiobutton(g, text="仅模拟 dry-run（只统计不删除）", value="dry-run",
+                        variable=self._set_mode_var).pack(anchor="w", pady=2)
+
+        # ---- 每日计划任务 ----
+        g = group("⏱ 每日定时自动清理")
+        self._set_sched_var = tk.BooleanVar(value=bool(self.settings.get("schedule", {}).get("enabled")))
+        ttk.Checkbutton(g, text="启用（低风险项自动清理，完成后轻提示；需保持程序运行）",
+                        variable=self._set_sched_var).pack(anchor="w", pady=2)
+        row = ttk.Frame(g)
+        row.pack(anchor="w", pady=(8, 0))
+        ttk.Label(row, text="每日 ").pack(side="left")
+        self._set_hour_var = tk.StringVar(value=str(self.settings.get("schedule", {}).get("hour", 12)).zfill(2))
+        ttk.Spinbox(row, from_=0, to=23, width=4, textvariable=self._set_hour_var,
+                    format="%02.0f").pack(side="left")
+        ttk.Label(row, text=" 时 ").pack(side="left")
+        self._set_min_var = tk.StringVar(value=str(self.settings.get("schedule", {}).get("minute", 0)).zfill(2))
+        ttk.Spinbox(row, from_=0, to=59, width=4, textvariable=self._set_min_var,
+                    format="%02.0f").pack(side="left")
+        ttk.Label(row, text=" 分 自动清理").pack(side="left")
+
+        def _save():
+            try:
+                self.settings["theme"] = self._set_theme_var.get()
+                self.settings["clean_mode"] = self._set_mode_var.get()
+                self.settings["schedule"] = {
+                    "enabled": bool(self._set_sched_var.get()),
+                    "hour": int(self._set_hour_var.get() or 12),
+                    "minute": int(self._set_min_var.get() or 0),
+                }
+                self._save_settings()
+                global CLEAN_MODE
+                CLEAN_MODE = self.settings["clean_mode"]
+                theme_changed = self.settings["theme"] != self.theme_name
+                self._log("⚙️ 设置已保存并生效", "ok")
+                self._toast("⚙️ 设置已保存", bg="#0f766e")
+                try:
+                    win.destroy()   # 若主题切换触发整窗重建，窗口已被销毁，忽略
+                except Exception:
+                    pass
+                if theme_changed:
+                    self._apply_theme()
+            except Exception as e:
+                messagebox.showerror("保存失败", f"设置保存出错：{e}")
+
+        btns = ttk.Frame(body)
+        btns.pack(fill="x", pady=(4, 0))
+        ttk.Button(btns, text="💾 保存设置", command=_save, style="Primary.TButton").pack(side="left", padx=4)
+        ttk.Button(btns, text="取消", command=win.destroy).pack(side="left", padx=4)
+
+    # ================= v5.0 磁盘地图：空间占比 + 大文件 TOP50 =================
+    def open_diskmap(self):
+        """磁盘地图面板：各盘占比进度条 + 大文件 TOP50（后台线程扫描，双击定位）。"""
+        win = tk.Toplevel(self.root)
+        self._add_title_bar(win, "磁盘地图", "💽", (0xea, 0x58, 0x0c))
+        win.title("磁盘地图 · 空间占比与大文件")
+        win.geometry("720x600")
+        win.transient(self.root)
+        try:
+            win.iconbitmap(self._icon_path)
+        except Exception:
+            pass
+        body = ttk.Frame(win, padding=12)
+        body.pack(fill="both", expand=True)
+
+        # ---- 各盘占比 ----
+        ttk.Label(body, text="📀 各盘空间占比", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
+        drives_box = tk.Frame(body, bg=self.COLOR_CARD, highlightthickness=1,
+                              highlightbackground=self.COLOR_BORDER, bd=0)
+        drives_box.pack(fill="x", pady=(4, 12))
+        try:
+            import ctypes
+            for letter in get_fixed_drives():
+                total = ctypes.c_ulonglong(0)
+                free = ctypes.c_ulonglong(0)
+                ctypes.windll.kernel32.GetDiskFreeSpaceExW(
+                    f"{letter}:\\", None, ctypes.byref(total), ctypes.byref(free))
+                used = total.value - free.value
+                pct = used / total.value * 100 if total.value else 0
+                row = ttk.Frame(drives_box)
+                row.pack(fill="x", padx=10, pady=5)
+                ttk.Label(row, text=f"{letter}:", font=("Consolas", 11, "bold"),
+                          foreground=self.COLOR_ACCENT).pack(side="left", width=4)
+                ttk.Label(row, text=f"{human_size(used)} / {human_size(total.value)}",
+                          font=("Microsoft YaHei UI", 8),
+                          foreground=self.COLOR_TEXT2).pack(side="right")
+                bar = ttk.Progressbar(row, maximum=100, value=pct)
+                bar.pack(side="left", fill="x", expand=True, padx=8)
+                ttk.Label(row, text=f"{pct:.0f}%", font=("Consolas", 9, "bold"),
+                          foreground=self.COLOR_WARN if pct > 85 else self.COLOR_TEXT2).pack(side="left")
+        except Exception:
+            ttk.Label(drives_box, text="无法读取磁盘信息", foreground=self.COLOR_TEXT2).pack(pady=8)
+
+        # ---- 大文件 TOP50 ----
+        ttk.Label(body, text="🗃 大文件 TOP 50（用户目录 + 各盘根目录，跳过系统目录）",
+                  font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w")
+        top_box = tk.Frame(body, bg=self.COLOR_CARD, highlightthickness=1,
+                           highlightbackground=self.COLOR_BORDER, bd=0)
+        top_box.pack(fill="both", expand=True, pady=(4, 0))
+        self.dm_tree = ttk.Treeview(top_box, columns=("size", "path"), show="headings", height=14)
+        self.dm_tree.heading("size", text="大小")
+        self.dm_tree.heading("path", text="路径")
+        self.dm_tree.column("size", width=100, anchor="e", stretch=False)
+        self.dm_tree.column("path", width=560, stretch=True)
+        self.dm_tree.pack(side="left", fill="both", expand=True)
+        vsb = ttk.Scrollbar(top_box, orient="vertical", command=self.dm_tree.yview)
+        vsb.pack(side="right", fill="y")
+        self.dm_tree.configure(yscrollcommand=vsb.set)
+        self.dm_tree.bind("<Double-1>", lambda e: self._dm_open())
+
+        foot = ttk.Frame(body)
+        foot.pack(fill="x", pady=(8, 0))
+        self.dm_status = tk.StringVar(value="就绪：点击「开始扫描」查找大文件")
+        ttk.Label(foot, textvariable=self.dm_status, font=("Microsoft YaHei UI", 8),
+                  foreground=self.COLOR_TEXT2).pack(side="left")
+        ttk.Button(foot, text="定位选中", command=self._dm_open).pack(side="right", padx=4)
+        ttk.Button(foot, text="🔍 开始扫描", command=self._dm_scan,
+                   style="Primary.TButton").pack(side="right", padx=4)
+
+    def _dm_scan(self):
+        """后台线程扫描大文件（堆取 Top50），完成后主线程填充表格。"""
+        if getattr(self, "_dm_busy", False):
+            return
+        self._dm_busy = True
+        for item in self.dm_tree.get_children():
+            self.dm_tree.delete(item)
+        self.dm_status.set("扫描中……（大目录较慢，请耐心等待）")
+
+        def worker():
+            import heapq
+            top = []          # 小顶堆 (size, path)，保持前 50
+            roots = []
+            up = os.path.expanduser("~")
+            if os.path.isdir(up):
+                roots.append(up)
+            for letter in get_fixed_drives():
+                roots.append(f"{letter}:\\")
+            skip_dirs = {"Windows", "$Recycle.Bin", "System Volume Information",
+                         "node_modules", ".git", "Program Files", "Program Files (x86)"}
+            for base in roots:
+                if not os.path.isdir(base):
+                    continue
+                for root, dirs, files in os.walk(base):
+                    dirs[:] = [d for d in dirs if d not in skip_dirs]
+                    for f in files:
+                        p = os.path.join(root, f)
+                        try:
+                            sz = os.path.getsize(p)
+                        except Exception:
+                            continue
+                        if len(top) < 50:
+                            heapq.heappush(top, (sz, p))
+                        elif sz > top[0][0]:
+                            heapq.heapreplace(top, (sz, p))
+            rows = sorted(top, reverse=True)
+            try:
+                self.root.after(0, self._dm_fill, rows)
+            except Exception:
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _dm_fill(self, rows):
+        self._dm_busy = False
+        for sz, p in rows:
+            self.dm_tree.insert("", "end", values=(human_size(sz), p))
+        self.dm_status.set(f"✅ 扫描完成：找到 {len(rows)} 个大文件。双击定位 / 右键打开位置。")
+
+    def _dm_open(self, event=None):
+        sel = self.dm_tree.selection()
+        if not sel:
+            messagebox.showinfo("提示", "请先在列表中选择一个大文件。")
+            return
+        path = self.dm_tree.item(sel[0], "values")[1]
+        try:
+            subprocess.Popen(["explorer", "/select,", path])
+        except Exception:
+            try:
+                os.startfile(os.path.dirname(path))
+            except Exception:
+                pass
 
     # ================= v4.0 智能版：战报 / 成就 / 数据 =================
     def _data_dir(self, name):
@@ -2354,21 +2788,23 @@ class CleanerApp:
 
         # (icon, title, subtitle, cfrom, cto, command)
         tools = [
-            ("⚡", "一键优化", "全自动维护 · 需管理员", (0x25, 0x63, 0xeb), (0x0e, 0xa5, 0xe9), self.open_optduck),
-            ("🛡", "进程拦截", "屏蔽广告/挖矿进程", (0x63, 0x66, 0xf1), (0x8b, 0x5c, 0xf6), self.open_process_block),
-            ("📦", "系统瘦身", "卸载预装应用", (0x0e, 0xa5, 0xe9), (0x06, 0xb6, 0xd4), self.open_debloat),
-            ("🧹", "深度清理", "残留注册表/驱动", (0x10, 0xb9, 0x81), (0x14, 0xb8, 0xa6), self.open_deep),
-            ("🔋", "电源方案", "高性能/节能切换", (0xf9, 0x73, 0x16), (0xef, 0x44, 0x44), self.open_power),
-            ("🎮", "GPU 配置", "独显直连/调度", (0xec, 0x48, 0x99), (0xf4, 0x3f, 0x5e), self.open_gpu),
+            ("⚡", "一键优化", "全自动维护", (0x25, 0x63, 0xeb), (0x0e, 0xa5, 0xe9), self.open_optduck),
+            ("🛡", "进程拦截", "广告/挖矿拦截", (0x63, 0x66, 0xf1), (0x8b, 0x5c, 0xf6), self.open_process_block),
+            ("📦", "系统瘦身", "卸载预装", (0x0e, 0xa5, 0xe9), (0x06, 0xb6, 0xd4), self.open_debloat),
+            ("🧹", "深度清理", "注册表/驱动", (0x10, 0xb9, 0x81), (0x14, 0xb8, 0xa6), self.open_deep),
+            ("🔋", "电源方案", "电源切换", (0xf9, 0x73, 0x16), (0xef, 0x44, 0x44), self.open_power),
+            ("🎮", "GPU 配置", "显卡调度", (0xec, 0x48, 0x99), (0xf4, 0x3f, 0x5e), self.open_gpu),
             ("🚀", "启动项", "开机加速", (0x0d, 0x94, 0x88), (0x0e, 0xa5, 0xe9), self.open_startup),
-            ("⚙", "系统设置", "高级/网络/DNS", (0x47, 0x55, 0x69), (0x64, 0x74, 0x8b), self.open_godmode),
-            ("🌐", "外部工具", "Win10 优化 / 360", (0x25, 0x63, 0xeb), (0x38, 0xbd, 0xf8), self.open_external_tools),
-            ("🖥", "系统工具", "控制面板等 9 项", (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools),
-            ("📄", "导出报告", "导出扫描结果", (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report),
-            ("🏆", "我的战报", "统计成就 · 历史图表", (0x7c, 0x3a, 0xed), (0xc0, 0x26, 0xd3), self.open_stats),
+            ("⚙", "系统设置", "高级/网络", (0x47, 0x55, 0x69), (0x64, 0x74, 0x8b), self.open_godmode),
+            ("💽", "磁盘地图", "空间占比", (0xea, 0x58, 0x0c), (0xf9, 0x73, 0x16), self.open_diskmap),
+            ("🌐", "外部工具", "Win10/360", (0x25, 0x63, 0xeb), (0x38, 0xbd, 0xf8), self.open_external_tools),
+            ("🖥", "系统工具", "控制面板", (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools),
+            ("📄", "导出报告", "导出结果", (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report),
+            ("🏆", "我的战报", "成就图表", (0x7c, 0x3a, 0xed), (0xc0, 0x26, 0xd3), self.open_stats),
+            ("⚙️", "设置中心", "偏好配置", (0x64, 0x74, 0x8b), (0x94, 0xa3, 0xb8), self.open_settings),
         ]
-        # 流式布局（全部 1 列等宽，避免 columnspan 引起的 Canvas 虚拟宽度不触发 Configure 陷阱）
-        COLS = 2
+        # 流式布局（3 列等宽，避免 columnspan 引起的 Canvas 虚拟宽度不触发 Configure 陷阱）
+        COLS = 3
         r, c = 0, 0
         for icon, title, subtitle, cfrom, cto, cmd in tools:
             if c + 1 > COLS:
@@ -4529,6 +4965,7 @@ class CleanerApp:
         self._record_clean(freed, removed)
         self._last_clean_bonus = min(15, 5 + int(freed / (256 * 1024 * 1024)))
         self._update_health()
+        self._hist_draw()   # 刷新仪表盘历史柱状图
         self._toast(f"🎉 本次释放 {human_size(freed)}，删除 {removed} 项！")
         messagebox.showinfo("完成", f"清理完成！\n共释放：{human_size(freed)}\n删除：{removed} 个文件/目录")
         self._scan()
@@ -5028,6 +5465,21 @@ def _ram_percent():
         return float(m.dwMemoryLoad)
     except Exception:
         return 0.0
+
+
+def _disk_usage_pct(letter="C"):
+    """指定盘符使用率（0-100）。GetDiskFreeSpaceExW。"""
+    try:
+        import ctypes
+        total = ctypes.c_ulonglong(0)
+        free = ctypes.c_ulonglong(0)
+        ctypes.windll.kernel32.GetDiskFreeSpaceExW(
+            f"{letter}:\\", None, ctypes.byref(total), ctypes.byref(free))
+        if total.value:
+            return 100.0 * (1 - free.value / total.value)
+    except Exception:
+        pass
+    return 0.0
 
 
 def main():
