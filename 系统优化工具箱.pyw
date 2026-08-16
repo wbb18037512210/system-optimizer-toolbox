@@ -1732,34 +1732,101 @@ OPTDUCK_OPTS = [
 # ----------------------------------------------------------------------------
 
 # ---- 主题调色板：浅色 / 深色（v4.0 主题系统）----
+# ================= 主题调色板 v7.0 =================
+# 设计语言：「温暖编辑派现代主义 + 单一森林绿主色」
+# 灵感：Linear / Notion / Things 这类高质感生产力工具
+# 原则：
+#   - 暖白纸感底 (#F8F6F2)，告别冰冷的 #f5f7fb
+#   - 单一主色：深森林绿 (#1F6F4A)，契合"清理/优化/成长"的产品语义
+#   - 副色（仅用于数据/统计）：冷湖蓝 (#0B6FA9)，与主色形成"安全 vs 信息"的对照
+#   - 警示/危险色保持饱和度，但降亮度，避免刺眼
 THEME_LIGHT = {
     "name": "浅色",
-    "bg": "#f5f7fb", "card": "#ffffff", "border": "#e3e8f1",
-    "text": "#1f2937", "text2": "#64748b",
-    "accent": "#2563eb", "accent_h": "#1d4ed8", "accent_p": "#1e40af",
-    "accent2": "#0f766e", "warn": "#d97706", "danger": "#dc2626", "danger_h": "#b91c1c",
-    "header": "#f1f5f9", "header_fg": "#475569",
-    "btn_active": "#eef2fb", "btn_pressed": "#e0e7f5",
-    "log_bg": "#0f172a", "log_fg": "#e2e8f0", "log_border": "#1e293b",
-    "tree_checked": "#dcfce7", "tree_checked_fg": "#14532d",
-    "tree_sel": "#dbeafe", "tree_sel_fg": "#1e3a8a",
-    "card_sub": "#e2e8f0", "gauge_track": "#e5eaf3",
-    "opt_fg": "#7c2d12", "opt_bg": "#fff7ed", "opt_border": "#fed7aa", "opt_active": "#ffedd5",
+    # 表面层
+    "bg":         "#F8F6F2",   # 整窗底色：暖白纸感
+    "card":       "#FFFFFF",   # 卡片底：纯白，与 bg 形成层叠
+    "card_hover": "#FAF8F3",   # 卡片 hover：暖白微底纹
+    "border":     "#E8E4DD",   # 边框：暖灰（不是冷灰 #e3e8f1）
+    "border_strong": "#D6D1C7",# 强调边框（用于激活态）
+    # 文字
+    "text":       "#1C1917",   # 主文字：暖近黑（不是 #1f2937 那种冷蓝黑）
+    "text2":      "#78716C",   # 次文字：暖灰（不是冷灰 #64748b）
+    "text3":      "#A8A29E",   # 三级文字（用于 hint/分隔符）
+    # 主色：森林绿
+    "accent":     "#1F6F4A",   # 主操作色（按钮、文字重点）
+    "accent_h":   "#164D34",   # hover
+    "accent_p":   "#0F3826",   # pressed
+    "accent_t":   "#E8F1EC",   # 15% 透明淡绿（用于 chip 背景）
+    # 副色：冷湖蓝（仅数据）
+    "accent2":    "#0B6FA9",
+    "accent2_t":  "#E4EFF7",
+    # 语义色
+    "warn":       "#B45309",   # 琥珀
+    "warn_t":     "#FEF3E6",
+    "danger":     "#B91C1C",   # 警示红（降饱和）
+    "danger_h":   "#991B1B",
+    "danger_t":   "#FEF2F2",
+    # 工具类色
+    "header":     "#FBF8F3",   # 表头底（暖白）
+    "header_fg":  "#44403C",   # 表头字（暖深棕）
+    "btn_active": "#E8F1EC",   # 按钮 hover（淡绿）
+    "btn_pressed":"#D4E7DC",   # 按钮 pressed
+    # 日志面板
+    "log_bg":     "#1C1917",
+    "log_fg":     "#E7E5E0",
+    "log_border": "#292524",
+    # Treeview
+    "tree_checked":    "#E8F1EC",
+    "tree_checked_fg": "#14532D",
+    "tree_sel":        "#E0EAE4",
+    "tree_sel_fg":     "#0F3826",
+    "card_sub":   "#E8E4DD",
+    "gauge_track":"#EFEAE0",   # 仪表轨底色
+    # 标签色（v6 "卸载预装" 等高危按钮）
+    "opt_fg":     "#7C2D12",
+    "opt_bg":     "#FEF3E6",
+    "opt_border": "#F5C4A1",
+    "opt_active": "#FCE8D5",
 }
 
 THEME_DARK = {
     "name": "深色",
-    "bg": "#0b1220", "card": "#151e2e", "border": "#2b3a52",
-    "text": "#e2e8f0", "text2": "#8fa3bf",
-    "accent": "#3b82f6", "accent_h": "#2563eb", "accent_p": "#1d4ed8",
-    "accent2": "#14b8a6", "warn": "#f59e0b", "danger": "#ef4444", "danger_h": "#dc2626",
-    "header": "#1b2942", "header_fg": "#a8b8d0",
-    "btn_active": "#243349", "btn_pressed": "#2b3d57",
-    "log_bg": "#070d18", "log_fg": "#cbd5e1", "log_border": "#2b3a52",
-    "tree_checked": "#123524", "tree_checked_fg": "#86efac",
-    "tree_sel": "#1e3a8a", "tree_sel_fg": "#dbeafe",
-    "card_sub": "#cbd5e1", "gauge_track": "#2b3a52",
-    "opt_fg": "#fbbf24", "opt_bg": "#2b2410", "opt_border": "#5b4a16", "opt_active": "#3a2f14",
+    "bg":         "#0F1115",   # 深近黑，带细微暖意
+    "card":       "#18181B",   # 卡片：深炭灰
+    "card_hover": "#1F1F23",
+    "border":     "#2D2A26",
+    "border_strong":"#3F3B36",
+    "text":       "#FAFAF9",
+    "text2":      "#A8A29E",
+    "text3":      "#78716C",
+    "accent":     "#4ADE80",   # 深色版主色：明翠绿（高亮但在黑底不刺眼）
+    "accent_h":   "#86EFAC",
+    "accent_p":   "#BBF7D0",
+    "accent_t":   "#14532D",
+    "accent2":    "#38BDF8",
+    "accent2_t":  "#0C4A6E",
+    "warn":       "#FBBF24",
+    "warn_t":     "#451A03",
+    "danger":     "#F87171",
+    "danger_h":   "#FCA5A5",
+    "danger_t":   "#450A0A",
+    "header":     "#1F1F23",
+    "header_fg":  "#D6D3D1",
+    "btn_active": "#14532D",
+    "btn_pressed":"#166534",
+    "log_bg":     "#09090B",
+    "log_fg":     "#D6D3D1",
+    "log_border": "#27272A",
+    "tree_checked":    "#14532D",
+    "tree_checked_fg": "#86EFAC",
+    "tree_sel":        "#1E3A4A",
+    "tree_sel_fg":     "#BAE6FD",
+    "card_sub":   "#D6D3D1",
+    "gauge_track":"#27272A",
+    "opt_fg":     "#FDBA74",
+    "opt_bg":     "#1C1917",
+    "opt_border": "#7C2D12",
+    "opt_active": "#292524",
 }
 
 # ---- v5.0 设置中心：默认配置（持久化到 config/settings.json）----
@@ -1823,30 +1890,43 @@ class CleanerApp:
         COLOR_HEADER   = T["header"]      # 表头底
 
         self.root.configure(bg=COLOR_BG)
-        # Windows 下若 DPI 缩放过，把默认字体也调一下，避免按钮文字偏小
+        # ---- 全局字体体系 v7.0 ----
+        # 中文 UI 用 Microsoft YaHei UI；标题用更醒目的字体；数字用 Consolas 等宽
         try:
             tkfont.nametofont("TkDefaultFont").configure(family="Microsoft YaHei UI", size=9)
             tkfont.nametofont("TkTextFont").configure(family="Microsoft YaHei UI", size=9)
         except Exception:
             pass
 
+        # 注册自定义字体角色
+        self.FONT_DISPLAY = ("Microsoft YaHei UI", 18, "bold")     # 顶栏主标题（粗壮、对照感强）
+        self.FONT_SUB = ("Microsoft YaHei UI", 9)                    # 副标题
+        self.FONT_SECTION = ("Microsoft YaHei UI", 10.5, "bold")    # 分组标题
+        self.FONT_BODY = ("Microsoft YaHei UI", 9.5)                # 正文
+        self.FONT_LABEL = ("Microsoft YaHei UI", 9)                 # 标签
+        self.FONT_BTN = ("Microsoft YaHei UI", 9.5)                 # 按钮
+        self.FONT_BTN_S = ("Microsoft YaHei UI", 9)                  # 按钮（小）
+        self.FONT_STAT_NUM = ("Consolas", 11, "bold")                # 数据数字（等宽）
+        self.FONT_STAT_LABEL = ("Microsoft YaHei UI", 8.5)           # 数据标签
+        self.FONT_TAG = ("Microsoft YaHei UI", 8, "bold")            # 角落 tag
+        self.FONT_TREE = ("Microsoft YaHei UI", 9)                   # 树
+        self.FONT_LOG = ("Consolas", 9)                              # 日志
+
         ts = ttk.Style()
         try:
-            ts.theme_use("vista")  # 用 vista 主题，更接近现代观感
+            ts.theme_use("vista")
         except Exception:
             pass
 
-        # Frame / LabelFrame 全部默认浅底
         ts.configure(".", background=COLOR_BG, foreground=COLOR_TEXT)
         ts.configure("TFrame", background=COLOR_BG)
         ts.configure("Card.TFrame", background=COLOR_CARD)
-        ts.configure("TLabel", background=COLOR_BG, foreground=COLOR_TEXT, font=("Microsoft YaHei UI", 9))
-
-        # LabelFrame 当作卡片用：边框浅、内 padding 大、标题字号加大加粗深色
-        ts.configure("Card.TLabelframe", background=COLOR_CARD, bordercolor=COLOR_BORDER,
-                     lightcolor=COLOR_BORDER, darkcolor=COLOR_BORDER, relief="solid", borderwidth=1)
-        ts.configure("Card.TLabelframe.Label", background=COLOR_CARD, foreground=COLOR_TEXT,
-                     font=("Microsoft YaHei UI", 10, "bold"), padding=(2, 0))
+        ts.configure("TLabel", background=COLOR_BG, foreground=COLOR_TEXT,
+                     font=self.FONT_BODY)
+        ts.configure("Card.TLabelframe", background=COLOR_CARD, bordercolor=T["border"],
+                     lightcolor=T["border"], darkcolor=T["border"], relief="solid", borderwidth=1)
+        ts.configure("Card.TLabelframe.Label", background=COLOR_CARD, foreground=T["text"],
+                     font=self.FONT_SECTION, padding=(2, 0))
 
         # 普通按钮：白底浅边框 + hover/pressed
         ts.configure("TButton",
@@ -1860,46 +1940,46 @@ class CleanerApp:
                background=[("active", T["btn_active"]), ("pressed", T["btn_pressed"]), ("disabled", COLOR_HEADER)],
                foreground=[("disabled", T["text2"])])
 
-        # 强调蓝色按钮（扫描 / 统计 / 管理员）
+        # 强调绿色按钮（扫描 / 统计 / 管理员）
         ts.configure("Primary.TButton",
-                     font=("Microsoft YaHei UI", 9, "bold"),
-                     padding=(14, 7),
+                     font=self.FONT_BTN_S,
+                     padding=(16, 8),
                      foreground="#ffffff",
                      background=COLOR_ACCENT,
                      bordercolor=COLOR_ACCENT,
                      lightcolor=COLOR_ACCENT, darkcolor=COLOR_ACCENT)
         ts.map("Primary.TButton",
-               background=[("active", T["accent_h"]), ("pressed", T["accent_p"]), ("disabled", "#93c5fd")],
+               background=[("active", T["accent_h"]), ("pressed", T["accent_p"]), ("disabled", "#A8D5BF")],
                foreground=[("disabled", "#f1f5f9")])
 
         # 危险红（开始清理）
         ts.configure("Action.TButton",
-                     font=("Microsoft YaHei UI", 9, "bold"),
-                     padding=(14, 7),
+                     font=self.FONT_BTN_S,
+                     padding=(16, 8),
                      foreground="#ffffff",
                      background=COLOR_DANGER,
                      bordercolor=COLOR_DANGER,
                      lightcolor=COLOR_DANGER, darkcolor=COLOR_DANGER)
         ts.map("Action.TButton",
-               background=[("active", T["danger_h"]), ("pressed", "#991b1b"), ("disabled", "#fca5a5")],
+               background=[("active", T["danger_h"]), ("pressed", "#7F1D1D"), ("disabled", "#FCA5A5")],
                foreground=[("disabled", "#f1f5f9")])
 
-        # 智能一键（紫罗兰）
+        # 智能一键（冷湖蓝，强调"信息/分析"）
         ts.configure("Smart.TButton",
-                     font=("Microsoft YaHei UI", 9, "bold"),
-                     padding=(14, 7),
+                     font=self.FONT_BTN_S,
+                     padding=(16, 8),
                      foreground="#ffffff",
-                     background="#6366f1",
-                     bordercolor="#6366f1",
-                     lightcolor="#6366f1", darkcolor="#6366f1")
+                     background=COLOR_ACCENT2,
+                     bordercolor=COLOR_ACCENT2,
+                     lightcolor=COLOR_ACCENT2, darkcolor=COLOR_ACCENT2)
         ts.map("Smart.TButton",
-               background=[("active", "#4f46e5"), ("pressed", "#4338ca"), ("disabled", "#a5b4fc")],
+               background=[("active", "#0C5A8A"), ("pressed", "#063E5E"), ("disabled", "#93C5DE")],
                foreground=[("disabled", "#f1f5f9")])
 
         # 一键优化橙色（高密度按钮）
         ts.configure("Opt.TButton",
-                     font=("Microsoft YaHei UI", 9),
-                     padding=(10, 5),
+                     font=self.FONT_BTN_S,
+                     padding=(12, 6),
                      foreground=T["opt_fg"],
                      background=T["opt_bg"],
                      bordercolor=T["opt_border"],
@@ -1907,6 +1987,19 @@ class CleanerApp:
         ts.map("Opt.TButton",
                background=[("active", T["opt_active"]), ("pressed", T["opt_border"])],
                foreground=[("active", COLOR_WARN)])
+
+        # 次级按钮（用于清理面板内的"全选/全不选/低风险"）
+        ts.configure("Secondary.TButton",
+                     font=self.FONT_BTN_S,
+                     padding=(12, 6),
+                     foreground=COLOR_TEXT,
+                     background=T["card"],
+                     bordercolor=T["border"],
+                     lightcolor=T["card"], darkcolor=T["border"])
+        ts.map("Secondary.TButton",
+               background=[("active", T["accent_t"]), ("pressed", T["btn_pressed"])],
+               foreground=[("active", COLOR_ACCENT)],
+               bordercolor=[("active", T["border_strong"])])
 
         # 顶栏标签
         ts.configure("Title.TLabel", font=("Microsoft YaHei UI", 15, "bold"),
@@ -2132,83 +2225,93 @@ class CleanerApp:
 
     # ================= v6.0 经典智能版：UI 构建（经 v3 验证的 grid 布局，告别 PanedWindow） =================
     def _build_ui(self):
-        # ---- 1. 顶栏 ----
+        # ---- 1. 顶栏（品牌区 + 操作区）----
         top = tk.Frame(self.root, bg=self.COLOR_BG)
-        top.pack(fill="x", padx=14, pady=(8, 4))
-        try:
-            from PIL import Image, ImageDraw, ImageTk
-            _logo_img = Image.new("RGBA", (40, 40), (37, 99, 235, 255))
-            _d = ImageDraw.Draw(_logo_img)
-            _d.ellipse((0, 0, 40, 40), fill=(37, 99, 235, 255))
-            _tk_logo = ImageTk.PhotoImage(_logo_img)
-        except Exception:
-            _tk_logo = None
-        logo_box = tk.Frame(top, bg=self.COLOR_BG)
+        top.pack(fill="x", padx=16, pady=(14, 10))
+
+        # 品牌区（左）
+        brand = tk.Frame(top, bg=self.COLOR_BG)
+        brand.pack(side="left")
+        logo_box = tk.Frame(brand, bg=self.COLOR_BG)
         logo_box.pack(side="left")
-        if _tk_logo is not None:
-            tk.Label(logo_box, image=_tk_logo, bg=self.COLOR_BG).pack(side="left")
-            self._logo_ref = _tk_logo
-        else:
-            tk.Label(logo_box, text="🛠", font=("Segoe UI Emoji", 20),
-                     bg=self.COLOR_ACCENT, fg="#ffffff", width=2).pack(side="left")
-        title_box = tk.Frame(top, bg=self.COLOR_BG)
-        title_box.pack(side="left", padx=(10, 0))
-        tk.Label(title_box, text="系统优化工具箱",
-                 font=("Microsoft YaHei UI", 15, "bold"),
-                 bg=self.COLOR_BG, fg=self.COLOR_TEXT).pack(anchor="w")
-        tk.Label(title_box, text="轻巧专注的 Windows 维护套件 · v6.0 经典智能版 · build 2026-08-16-12",
-                 font=("Microsoft YaHei UI", 9),
-                 bg=self.COLOR_BG, fg=self.COLOR_TEXT2).pack(anchor="w")
+        self._brand_logo_cv = tk.Canvas(logo_box, width=34, height=34, bg=self.COLOR_BG,
+                                        highlightthickness=0, bd=0)
+        self._brand_logo_cv.pack(side="left")
+        self._draw_brand_logo(self._brand_logo_cv)
+
+        title_box = tk.Frame(brand, bg=self.COLOR_BG)
+        title_box.pack(side="left", padx=(12, 0))
+        title_row = tk.Frame(title_box, bg=self.COLOR_BG)
+        title_row.pack(anchor="w")
+        tk.Label(title_row, text="系统优化工具箱",
+                 font=self.FONT_DISPLAY,
+                 bg=self.COLOR_BG, fg=self.COLOR_TEXT).pack(side="left")
+        self.version_tag = tk.Label(title_row, text="  v7.0  ",
+                                    font=self.FONT_TAG,
+                                    bg=self.COLOR_ACCENT, fg="#FFFFFF",
+                                    padx=2, pady=1)
+        self.version_tag.pack(side="left", padx=(10, 0))
+        tk.Label(title_box,
+                 text="轻巧专注的 Windows 维护套件 · 森林绿主题",
+                 font=self.FONT_SUB,
+                 bg=self.COLOR_BG, fg=self.COLOR_TEXT2).pack(anchor="w", pady=(2, 0))
+
+        # 操作区（右）
         right = tk.Frame(top, bg=self.COLOR_BG)
         right.pack(side="right")
         self.admin_badge = tk.Label(right, text="  ",
-                                    font=("Microsoft YaHei UI", 9, "bold"),
-                                    bg=self.COLOR_ACCENT2, fg="#ffffff", padx=8, pady=2)
+                                    font=self.FONT_BTN_S,
+                                    bg=self.COLOR_ACCENT, fg="#FFFFFF",
+                                    padx=10, pady=3)
         self.admin_badge.pack(side="right", anchor="e")
-        self.theme_btn = tk.Label(right, text="🌙 深色", font=("Microsoft YaHei UI", 9, "bold"),
-                                  bg=self.COLOR_CARD, fg=self.COLOR_TEXT, padx=10, pady=3,
-                                  cursor="hand2", highlightthickness=1,
-                                  highlightbackground=self.COLOR_BORDER)
+
+        self.theme_btn = tk.Label(right, text="深色模式",
+                                  font=self.FONT_BTN_S,
+                                  bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                                  padx=12, pady=4, cursor="hand2",
+                                  highlightthickness=1, highlightbackground=self.COLOR_BORDER)
         self.theme_btn.pack(side="right", anchor="e", padx=(8, 0))
         self.theme_btn.bind("<Button-1>", lambda e: self._apply_theme())
 
         def _short(icon, command):
-            b = tk.Label(right, text=icon, font=("Segoe UI Emoji", 15),
-                         bg=self.COLOR_BG, fg=self.COLOR_TEXT, cursor="hand2", padx=4)
-            b.pack(side="right", anchor="e", padx=(4, 0))
+            b = tk.Label(right, text=icon, font=("Segoe UI Emoji", 14),
+                         bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                         cursor="hand2", padx=4, pady=3,
+                         highlightthickness=1, highlightbackground=self.COLOR_BORDER)
+            b.pack(side="right", anchor="e", padx=(8, 0))
             b.bind("<Button-1>", lambda e: command())
-            try:
-                b.bind("<Enter>", lambda e: b.configure(fg=self.COLOR_ACCENT))
-                b.bind("<Leave>", lambda e: b.configure(fg=self.COLOR_TEXT))
-            except Exception:
-                pass
+
+            def on_enter(e):
+                b.configure(bg=self.T["accent_t"], fg=self.COLOR_ACCENT,
+                            highlightbackground=self.T["border_strong"])
+            def on_leave(e):
+                b.configure(bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                            highlightbackground=self.COLOR_BORDER)
+            b.bind("<Enter>", on_enter)
+            b.bind("<Leave>", on_leave)
         _short("⚙", self.open_settings)
         _short("💽", self.open_diskmap)
 
-        # ---- 2. 紧凑状态条（健康分 + 三环 + 摘要 + 快捷操作）----
-        # 关键修复：去掉 highlightthickness=1，用更强的边距/背景对比保证可见；
-        # strip.pack_propagate(False) + 显式高度 = 高度确定，不再被父容器压扁。
+        # ---- 2. 紧凑状态条 ----
         self._build_compact_dashboard()
 
-        # ---- 3. 主分割：v5.0 验证过的 grid + minsize=420 方案（必须用此模式，否则 ttk/pack 在打包后会丢左栏）----
+        # ---- 3. 主分割：v5.0 验证过的 grid + minsize=440 方案 ----
         main = tk.Frame(self.root, bg=self.COLOR_BG)
-        main.pack(fill="both", expand=True, padx=8, pady=(0, 4))
-        main.grid_columnconfigure(0, minsize=420)   # ← 关键：左栏固定最少 420 宽
-        main.grid_columnconfigure(1, weight=1)       # 右栏弹性
+        main.pack(fill="both", expand=True, padx=16, pady=(0, 8))
+        main.grid_columnconfigure(0, minsize=440)
+        main.grid_columnconfigure(1, weight=1)
         main.grid_rowconfigure(0, weight=1)
 
-        # 左 = 工具面板（tk.Frame + bg 填充保证可见）
         left_outer = tk.Frame(main, bg=self.COLOR_CARD,
                               highlightthickness=1, highlightbackground=self.COLOR_BORDER)
-        left_outer.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=0)
+        left_outer.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=0)
         self._build_tools_panel(left_outer)
 
-        # 右 = 清理 + 日志（弹性撑满剩余宽度）
         right_outer = tk.Frame(main, bg=self.COLOR_BG)
         right_outer.grid(row=0, column=1, sticky="nsew", pady=0)
         right_outer.grid_columnconfigure(0, weight=1)
-        right_outer.grid_rowconfigure(0, weight=1)   # 清理面板：弹性高度
-        right_outer.grid_rowconfigure(1, weight=0)   # 日志：自然高度
+        right_outer.grid_rowconfigure(0, weight=1)
+        right_outer.grid_rowconfigure(1, weight=0)
         self._build_cleanup_panel(right_outer)
         self._build_log_into(right_outer)
 
@@ -2219,68 +2322,104 @@ class CleanerApp:
         self._mon_after = None
         self._mon_tick()
 
-    # ================= v6.0 紧凑状态条 =================
+    # ---- v7.0 品牌 LOGO 自绘（Canvas 几何）----
+    def _draw_brand_logo(self, cv):
+        """森林绿圆角方形底 + 白色 W + 右上角光点。"""
+        cv.delete("all")
+        w = cv.winfo_width() or 34
+        h = cv.winfo_height() or 34
+        cv.create_rectangle(2, 2, w - 2, h - 2, fill=self.COLOR_ACCENT, outline="", width=0)
+        cx, cy = w / 2, h / 2
+        cv.create_polygon(
+            cx - 9, cy - 7, cx - 6, cy + 8, cx - 3, cy - 2,
+            cx,      cy + 8, cx + 3, cy - 2,
+            cx + 6,  cy + 8, cx + 9, cy - 7,
+            fill="#FFFFFF", outline="", width=0, smooth=True,
+        )
+        cv.create_oval(w - 9, 4, w - 5, 8, fill=self.COLOR_ACCENT2, outline="")
+
+    # ================= v7.0 紧凑状态条：4 个 stat chip + 操作区 =================
     def _build_compact_dashboard(self):
-        # 强制显式高度 + 锁住传播，确保任何打包环境下都不被压成 0
+        """设计：4 个 stat chip（健康/CPU/内存/磁盘）| 摘要文本 | 3 个快捷操作。
+        每个 chip 是一个垂直堆叠的小卡片：大号数字 + 小号标签，用细线分隔。
+        """
+        # 强制显式高度 + 锁住传播
         strip = tk.Frame(self.root, bg=self.COLOR_CARD,
                          highlightthickness=1, highlightbackground=self.COLOR_BORDER, bd=0,
-                         height=64)
-        strip.pack(fill="x", padx=10, pady=(0, 6))
-        strip.pack_propagate(False)  # 防止子控件撑开/压扁 strip
+                         height=88)
+        strip.pack(fill="x", padx=16, pady=(0, 8))
+        strip.pack_propagate(False)
         inner = tk.Frame(strip, bg=self.COLOR_CARD)
-        inner.pack(fill="both", expand=True, padx=10, pady=8)
+        inner.pack(fill="both", expand=True, padx=14, pady=12)
 
-        # 健康分小环
-        self.health_cv = tk.Canvas(inner, width=44, height=44, bg=self.COLOR_CARD,
+        # ---- 左：健康分环 ----
+        health_chip = tk.Frame(inner, bg=self.COLOR_CARD)
+        health_chip.pack(side="left")
+        self.health_cv = tk.Canvas(health_chip, width=48, height=48, bg=self.COLOR_CARD,
                                    highlightthickness=0, bd=0)
         self.health_cv.pack(side="left")
-        self._gauge_color = "#10b981"
+        self._gauge_color = self.COLOR_ACCENT
         self._health_draw(0)
-
-        self.health_val = tk.Label(inner, text="健康分 --", font=("Microsoft YaHei UI", 13, "bold"),
+        health_text = tk.Frame(health_chip, bg=self.COLOR_CARD)
+        health_text.pack(side="left", padx=(8, 0))
+        self.health_val = tk.Label(health_text, text="健康分 --",
+                                   font=self.FONT_STAT_NUM,
                                    bg=self.COLOR_CARD, fg=self.COLOR_TEXT)
-        self.health_val.pack(side="left", padx=(8, 4))
-        self.health_lvl = tk.Label(inner, text="未评估", font=("Microsoft YaHei UI", 9),
+        self.health_val.pack(anchor="w")
+        self.health_lvl = tk.Label(health_text, text="未评估",
+                                   font=self.FONT_STAT_LABEL,
                                    bg=self.COLOR_CARD, fg=self.COLOR_TEXT2)
-        self.health_lvl.pack(side="left", padx=(0, 16))
+        self.health_lvl.pack(anchor="w")
 
-        # 分隔
-        tk.Frame(inner, bg=self.COLOR_BORDER, width=1).pack(side="left", fill="y", padx=2)
+        # ---- 分隔线 ----
+        sep1 = tk.Frame(inner, bg=self.COLOR_BORDER, width=1)
+        sep1.pack(side="left", fill="y", padx=18)
 
-        # 三环：CPU / RAM / 磁盘（小，36px）
+        # ---- CPU / 内存 / 磁盘 三 chip ----
         self._gauge_cvs = {}
         self._gauge_lbls = {}
-        for key, color, txt in (("cpu", self.COLOR_ACCENT, "CPU"),
-                                  ("ram", self.COLOR_ACCENT2, "内存"),
-                                  ("disk", self.COLOR_WARN, "磁盘")):
-            cell = tk.Frame(inner, bg=self.COLOR_CARD)
-            cell.pack(side="left", padx=(10, 0))
-            cv = tk.Canvas(cell, width=36, height=36, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
-            cv.pack(side="left")
-            lbl = tk.Label(cell, text="--", bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
-                           font=("Microsoft YaHei UI", 9, "bold"))
-            lbl.pack(side="left", padx=(4, 0))
+        for key, color, label, unit in (
+                ("cpu",  self.COLOR_ACCENT,  "CPU",  "%"),
+                ("ram",  self.COLOR_ACCENT2, "内存", "%"),
+                ("disk", self.COLOR_WARN,     "磁盘", "%"),
+        ):
+            chip = tk.Frame(inner, bg=self.COLOR_CARD)
+            chip.pack(side="left", padx=(0, 14))
+            # 小环
+            cv = tk.Canvas(chip, width=40, height=40, bg=self.COLOR_CARD,
+                           highlightthickness=0, bd=0)
+            cv.pack(side="top", anchor="w")
+            # 数值 + 标签（水平堆叠，节省垂直空间）
+            num_lbl = tk.Label(chip, text="--%",
+                               font=self.FONT_STAT_NUM,
+                               bg=self.COLOR_CARD, fg=self.COLOR_TEXT)
+            num_lbl.pack(side="top", anchor="w")
+            sub_lbl = tk.Label(chip, text=label,
+                               font=self.FONT_STAT_LABEL,
+                               bg=self.COLOR_CARD, fg=self.COLOR_TEXT2)
+            sub_lbl.pack(side="top", anchor="w")
             self._gauge_cvs[key] = cv
-            self._gauge_lbls[key] = lbl
+            self._gauge_lbls[key] = num_lbl
             self._gauge_draw(cv, 0, color)
 
-        # 分隔
-        tk.Frame(inner, bg=self.COLOR_BORDER, width=1).pack(side="left", fill="y", padx=10)
+        # ---- 分隔线 2 ----
+        sep2 = tk.Frame(inner, bg=self.COLOR_BORDER, width=1)
+        sep2.pack(side="left", fill="y", padx=18)
 
-        # 摘要：累计释放 + 清理次数 + 权限
+        # ---- 摘要文本 ----
         self.summary_lbl = tk.Label(inner, text="就绪",
-                                    font=("Microsoft YaHei UI", 9),
+                                    font=self.FONT_BODY,
                                     bg=self.COLOR_CARD, fg=self.COLOR_TEXT2)
         self.summary_lbl.pack(side="left", padx=(0, 8))
 
-        # 智能一键 + 扫描 + 清理 + 导出快捷操作放在状态条右端
+        # ---- 右：快捷操作 ----
         actions = tk.Frame(inner, bg=self.COLOR_CARD)
         actions.pack(side="right")
         ttk.Button(actions, text="✨ 智能一键", command=self._smart_clean,
                    style="Smart.TButton").pack(side="left", padx=2)
-        ttk.Button(actions, text="🔍 扫描", command=self._scan,
+        ttk.Button(actions, text="扫描占用", command=self._scan,
                    style="Primary.TButton").pack(side="left", padx=2)
-        ttk.Button(actions, text="🚀 清理", command=self._ask_clean,
+        ttk.Button(actions, text="开始清理", command=self._ask_clean,
                    style="Action.TButton").pack(side="left", padx=2)
 
     def _update_summary(self):
@@ -2296,58 +2435,114 @@ class CleanerApp:
 
     # ================= v6.0 工具面板（左侧滚动区） =================
     def _make_icon_button(self, parent, kind, text, command):
-        """紧凑型工具按钮：16px Canvas 自绘图标 + 文字，可放入 2 列网格。
-        采用最朴素的 tk.Frame+pack 组合（不用 Canvas 滚动），保证打包后必定可见。"""
+        """v7.0 精炼版：19px Canvas 自绘图标 + 中文标签 + 圆角感 + accent hover。
+        视觉处理：
+          - 边框 1px，使用 border / border_strong 二级对比
+          - hover：bg → accent_t（淡绿），icon 中心填色高亮，文字 → accent
+          - 按下：bg → accent_p 半透明（pressed 用 btn_pressed）
+        """
         bg = self.COLOR_CARD
-        bg_hov = self.T["btn_active"]
-        f = tk.Frame(parent, bg=bg, cursor="hand2", highlightthickness=1,
-                     highlightbackground=self.COLOR_BORDER)
+        bg_hov = self.T["accent_t"]
+        bg_pressed = self.T["btn_pressed"]
+        border = self.COLOR_BORDER
+        border_hov = self.T["border_strong"]
+        accent = self.COLOR_ACCENT
+
+        f = tk.Frame(parent, bg=bg, cursor="hand2",
+                     highlightthickness=1, highlightbackground=border)
         f.bind("<Button-1>", lambda e: command())
         inner = tk.Frame(f, bg=bg)
-        inner.pack(padx=8, pady=3, fill="x")
-        cv = tk.Canvas(inner, width=16, height=16, bg=bg, highlightthickness=0, bd=0)
+        inner.pack(padx=10, pady=5, fill="x")
+        cv = tk.Canvas(inner, width=19, height=19, bg=bg, highlightthickness=0, bd=0)
         cv.pack(side="left")
-        self._draw_card_icon(cv, kind, 8, 8, s=12, bg_cut=bg)
+        # 默认 icon 用 accent 色（视觉锚点）
+        self._draw_card_icon(cv, kind, 10, 10, s=14, bg_cut=bg, color=accent)
         lbl = tk.Label(inner, text=text, bg=bg, fg=self.COLOR_TEXT,
-                       font=("Microsoft YaHei UI", 9))
-        lbl.pack(side="left", padx=(5, 0))
+                       font=self.FONT_BTN)
+        lbl.pack(side="left", padx=(8, 0))
         lbl.bind("<Button-1>", lambda e: command())
 
+        widgets = (f, inner, cv, lbl)
+
+        def _restyle(bg_, border_, fg_, ic_color):
+            for w in (f, inner, cv, lbl):
+                try:
+                    if w is f:
+                        w.configure(bg=bg_, highlightbackground=border_)
+                    elif w is cv:
+                        w.configure(bg=bg_)
+                    else:
+                        w.configure(bg=bg_)
+                except Exception:
+                    pass
+            try:
+                lbl.configure(fg=fg_)
+            except Exception:
+                pass
+            # 重绘 icon（用 active 色）
+            try:
+                self._draw_card_icon(cv, kind, 10, 10, s=14, bg_cut=bg_, color=ic_color)
+            except Exception:
+                pass
+
         def on_enter(e):
-            for w in (f, inner, cv, lbl):
-                try:
-                    w.configure(bg=bg_hov)
-                except Exception:
-                    pass
+            _restyle(bg_hov, border_hov, accent, accent)
+
         def on_leave(e):
-            for w in (f, inner, cv, lbl):
-                try:
-                    w.configure(bg=bg)
-                except Exception:
-                    pass
-        for w in (f, inner, cv, lbl):
+            _restyle(bg, border, self.COLOR_TEXT, accent)
+
+        def on_press(e):
+            _restyle(bg_pressed, border_hov, accent, accent)
+
+        for w in widgets:
             w.bind("<Enter>", on_enter)
             w.bind("<Leave>", on_leave)
+            w.bind("<ButtonPress-1>", on_press)
+            w.bind("<ButtonRelease-1>",
+                   lambda e: (_restyle(bg_hov, border_hov, accent, accent), command()))
         return f
 
     def _build_tools_panel(self, parent):
-        """左侧工具面板：v5.0 验证可用模式——tk.Frame 容器 + grid 2 列按钮。
-        容器全部 tk.Frame + 显式 bg，不再用 ttk.LabelFrame（打包后某些主题会渲染失败）。"""
+        """左侧工具面板：3 个分组 + 自绘渐变条 + 2 列网格按钮。
+        v7.0 设计：
+          - 分组容器用 tk.LabelFrame + 色卡边框
+          - 每个分组标题左侧一道森林绿渐变竖条（视觉锚点）
+          - 按钮之间预留呼吸空间
+        """
+        def _section(title, hint=None):
+            """构造一个分组：LabelFrame + 渐变竖条 + 标题 + 可选提示。"""
+            sec = tk.LabelFrame(parent, text="",
+                                bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                                padx=10, pady=8, bd=0,
+                                highlightthickness=1,
+                                highlightbackground=self.COLOR_BORDER)
+            sec.pack(fill="x", pady=(0, 10), padx=4)
+            # 标题栏（左侧渐变竖条 + 标题文字 + 可选提示）
+            head = tk.Frame(sec, bg=self.COLOR_CARD)
+            head.pack(fill="x", pady=(0, 8))
+            # 左侧森林绿竖条
+            stripe = tk.Frame(head, bg=self.COLOR_ACCENT, width=4, height=14)
+            stripe.pack(side="left", padx=(0, 8))
+            stripe.pack_propagate(False)
+            tk.Label(head, text=title,
+                     bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                     font=self.FONT_SECTION).pack(side="left")
+            if hint:
+                tk.Label(head, text="  " + hint,
+                         bg=self.COLOR_CARD, fg=self.COLOR_TEXT3,
+                         font=("Microsoft YaHei UI", 8.5)).pack(side="left")
+            return sec
+
+        def _grid(sec):
+            g = tk.Frame(sec, bg=self.COLOR_CARD)
+            g.pack(fill="x")
+            for c in range(2):
+                g.columnconfigure(c, weight=1)
+            return g
+
         # ===== 系统快捷工具 =====
-        sec1 = tk.LabelFrame(parent, text="  🖥  系统快捷工具  ",
-                              bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
-                              font=("Microsoft YaHei UI", 10, "bold"),
-                              padx=8, pady=6, bd=1, relief="solid",
-                              highlightbackground=self.COLOR_BORDER, highlightthickness=1)
-        sec1.pack(fill="x", pady=(0, 8), padx=4)
-        intro1 = tk.Label(sec1, text="以下按钮直接调用 Windows 自带工具：",
-                          bg=self.COLOR_CARD, fg=self.COLOR_TEXT2,
-                          font=("Microsoft YaHei UI", 8.5))
-        intro1.pack(anchor="w", pady=(0, 4))
-        grid1 = tk.Frame(sec1, bg=self.COLOR_CARD)
-        grid1.pack(fill="x")
-        for c in range(2):
-            grid1.columnconfigure(c, weight=1)
+        sec1 = _section("系统快捷工具", "9 项 · Windows 自带")
+        grid1 = _grid(sec1)
         sys_tools = [
             ("monitor",   "控制面板",       lambda: self._open_target("control.exe")),
             ("rocket",    "任务管理器",     lambda: self._open_target("taskmgr.exe")),
@@ -2365,16 +2560,8 @@ class CleanerApp:
                 row=r, column=c, padx=2, pady=2, sticky="ew")
 
         # ===== 优化与卸载面板 =====
-        sec2 = tk.LabelFrame(parent, text="  🧩  优化与卸载面板  ",
-                              bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
-                              font=("Microsoft YaHei UI", 10, "bold"),
-                              padx=8, pady=6, bd=1, relief="solid",
-                              highlightbackground=self.COLOR_BORDER, highlightthickness=1)
-        sec2.pack(fill="x", pady=(0, 8), padx=4)
-        grid2 = tk.Frame(sec2, bg=self.COLOR_CARD)
-        grid2.pack(fill="x")
-        for c in range(2):
-            grid2.columnconfigure(c, weight=1)
+        sec2 = _section("优化与卸载面板", "4 项 · 推荐")
+        grid2 = _grid(sec2)
         opt_tools = [
             ("box",     "卸载预装",     self.open_debloat),
             ("broom",   "深度优化",     self.open_deep),
@@ -2387,19 +2574,17 @@ class CleanerApp:
                 row=r, column=c, padx=2, pady=2, sticky="ew")
 
         # ===== 一键优化（需管理员） =====
-        sec3 = tk.LabelFrame(parent, text="  ⚡  一键优化（需管理员）  ",
-                              bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
-                              font=("Microsoft YaHei UI", 10, "bold"),
-                              padx=8, pady=6, bd=1, relief="solid",
-                              highlightbackground=self.COLOR_BORDER, highlightthickness=1)
-        sec3.pack(fill="x", pady=(0, 4), padx=4)
-        warning = tk.Label(sec3,
-                           text="⚠ 高危操作：非管理员将被 UAC 提权，每项执行前二次确认，全部可逆。",
-                           bg=self.COLOR_CARD, fg=self.COLOR_DANGER,
-                           font=("Microsoft YaHei UI", 8.5), wraplength=400)
-        warning.pack(anchor="w", pady=(0, 4))
-        grid3 = tk.Frame(sec3, bg=self.COLOR_CARD)
-        grid3.pack(fill="x")
+        sec3 = _section("一键优化", "15 项 · 需管理员权限")
+        warn_frame = tk.Frame(sec3, bg=self.COLOR_WARN_T,
+                              highlightthickness=1,
+                              highlightbackground=self.T.get("warn", "#F5C4A1"))
+        warn_frame.pack(fill="x", pady=(0, 8))
+        tk.Label(warn_frame,
+                 text="⚠  高危操作：执行前会二次确认，全部操作可逆",
+                 bg=self.COLOR_WARN_T, fg=self.COLOR_WARN,
+                 font=("Microsoft YaHei UI", 8.5), padx=8, pady=4
+                 ).pack(anchor="w")
+        grid3 = _grid(sec3)
         for c in range(2):
             grid3.columnconfigure(c, weight=1)
         one_click = [
@@ -2429,16 +2614,19 @@ class CleanerApp:
         try:
             cv = self.health_cv
             cv.delete("all")
-            W = H = 44
-            cx, cy, R = W / 2, H / 2, 16
+            W = H = 48
+            cx, cy, R = W / 2 - 1, H / 2 - 1, 17
             start, span = 135, -270
+            # 轨
             cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start, extent=span,
                           style="arc", outline=self.T["gauge_track"], width=4)
-            col = getattr(self, "_gauge_color", "#10b981")
+            col = getattr(self, "_gauge_color", self.COLOR_ACCENT)
+            # 进度
             cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start,
                           extent=span * max(0, min(100, score)) / 100.0,
                           style="arc", outline=col, width=4)
-            cv.create_text(cx, cy, text=str(score), font=("Microsoft YaHei UI", 11, "bold"),
+            cv.create_text(cx, cy, text=str(score),
+                           font=("Consolas", 12, "bold"),
                            fill=self.COLOR_TEXT)
         except Exception:
             pass
@@ -2496,12 +2684,22 @@ class CleanerApp:
 
     # ================= v4.0 智能版：状态栏 =================
     def _build_status_bar(self):
+        """状态栏：左侧运行摘要 ｜ 右侧版本 tag。
+        视觉处理：细微顶部边框线，文字采用 refined typography。"""
         bar = tk.Frame(self.root, bg=self.COLOR_BG)
-        bar.pack(fill="x", padx=14, pady=(2, 8))
-        self.status_lbl = tk.Label(bar, text="就绪", font=("Microsoft YaHei UI", 9),
+        bar.pack(fill="x", padx=16, pady=(2, 10))
+        # 顶部细线分隔
+        sep = tk.Frame(bar, bg=self.COLOR_BORDER, height=1)
+        sep.pack(fill="x", pady=(0, 6))
+        # 内容区
+        content = tk.Frame(bar, bg=self.COLOR_BG)
+        content.pack(fill="x")
+        self.status_lbl = tk.Label(content, text="就绪",
+                                   font=self.FONT_LABEL,
                                    bg=self.COLOR_BG, fg=self.COLOR_TEXT2)
         self.status_lbl.pack(side="left")
-        self.status_lbl2 = tk.Label(bar, text="v6.0 智能版", font=("Microsoft YaHei UI", 9, "bold"),
+        self.status_lbl2 = tk.Label(content, text="v7.0 经典智能版 · 森林绿",
+                                    font=self.FONT_TAG,
                                     bg=self.COLOR_BG, fg=self.COLOR_ACCENT)
         self.status_lbl2.pack(side="right")
 
@@ -2511,9 +2709,10 @@ class CleanerApp:
             total_mb = sum(s.get("freed_mb", 0) for s in sessions)
             perm = "管理员" if is_admin() else "普通权限"
             self.status_lbl.configure(
-                text=f"健康分 {self.health_score}（{self.health_level}） ｜ "
-                     f"累计释放 {human_size(int(total_mb * 1048576))} ｜ "
-                     f"清理 {len(sessions)} 次 ｜ 权限：{perm}")
+                text=f"健康分 {self.health_score}（{self.health_level}）"
+                     f"    ·    累计释放 {human_size(int(total_mb * 1048576))}"
+                     f"    ·    清理 {len(sessions)} 次"
+                     f"    ·    权限：{perm}")
         except Exception:
             pass
 
@@ -2992,50 +3191,51 @@ class CleanerApp:
         return tuple(min(255, v + amt) for v in c)
 
     @staticmethod
-    def _draw_card_icon(cv, kind, cx, cy, s=26, bg_cut="#ffffff"):
-        """在卡片 Canvas 上画一个固定 s 像素的纯几何白色图标。
-        所有图标在 26×26 包围盒内居中、对齐、永远等大——彻底摆脱 emoji 字体回退问题。"""
+    def _draw_card_icon(cv, kind, cx, cy, s=26, bg_cut="#ffffff", color="#1F6F4A"):
+        """在卡片 Canvas 上画一个固定 s 像素的几何图标（默认森林绿）。
+        所有图标在 s×s 包围盒内居中、对齐、永远等大——彻底摆脱 emoji 字体回退问题。
+        color 参数允许任意颜色（默认 #1F6F4A 森林绿）。"""
         h = s // 2
         if kind == "lightning":  # 一键优化
             pts = [cx + 1, cy - h, cx - h * 0.45, cy + 1, cx - h * 0.1, cy + 1,
                    cx - h * 0.45, cy + h, cx + h * 0.55, cy - h * 0.15,
                    cx + h * 0.1, cy - h * 0.15, cx + h * 0.5, cy - h * 0.55]
-            cv.create_polygon(pts, fill="white", outline="")
+            cv.create_polygon(pts, fill=color, outline="")
         elif kind == "shield":  # 进程拦截
             cv.create_polygon([cx, cy - h, cx + h, cy - h * 0.6, cx + h * 0.85, cy + h * 0.4,
                                 cx, cy + h, cx - h * 0.85, cy + h * 0.4, cx - h, cy - h * 0.6],
-                              fill="white", outline="")
+                              fill=color, outline="")
         elif kind == "box":  # 系统瘦身（立方体）
             cv.create_rectangle(cx - h, cy - h * 0.55, cx + h * 0.55, cy + h * 0.85,
-                                outline="white", width=2)
+                                outline=color, width=2)
             cv.create_polygon([cx - h, cy - h * 0.55, cx, cy - h,
                                 cx + h * 0.55, cy - h * 0.55],
-                              outline="white", width=2, fill="")
+                              outline=color, width=2, fill="")
             cv.create_polygon([cx + h * 0.55, cy - h * 0.55, cx + h, cy - h,
                                 cx + h, cy + h * 0.85, cx + h * 0.55, cy + h * 0.85],
-                              outline="white", width=2, fill="")
+                              outline=color, width=2, fill="")
         elif kind == "broom":  # 深度清理
             cv.create_polygon([cx - h * 0.3, cy + h * 0.85, cx - h, cy + h,
                                 cx - h * 0.7, cy - h * 0.4, cx, cy - h * 0.6],
-                              fill="white", outline="")
+                              fill=color, outline="")
             for i in range(3):
                 y = cy - h * 0.4 + i * h * 0.22
                 cv.create_line(cx - h * 0.7 + i * h * 0.28, y,
                                cx - h * 0.35 + i * h * 0.28, y + h * 0.55,
-                               fill="white", width=2)
+                               fill=color, width=2)
         elif kind == "battery":  # 电源方案
             cv.create_rectangle(cx - h, cy - h * 0.5, cx + h * 0.7, cy + h * 0.5,
-                                outline="white", width=2)
+                                outline=color, width=2)
             cv.create_rectangle(cx + h * 0.7, cy - h * 0.22, cx + h * 1.0, cy + h * 0.22,
-                                fill="white", outline="")
+                                fill=color, outline="")
             cv.create_rectangle(cx - h * 0.7, cy - h * 0.28, cx + h * 0.3, cy + h * 0.28,
-                                fill="white", outline="")
+                                fill=color, outline="")
         elif kind == "gamepad":  # GPU 配置
             cv.create_polygon([cx - h, cy - h * 0.5, cx - h * 0.7, cy - h * 0.55,
                                 cx + h * 0.7, cy - h * 0.55, cx + h, cy - h * 0.5,
                                 cx + h * 1.1, cy - h * 0.1, cx + h, cy + h * 0.5,
                                 cx - h, cy + h * 0.5, cx - h * 1.1, cy - h * 0.1],
-                              fill="white", outline="")
+                              fill=color, outline="")
             cv.create_oval(cx - h * 0.55, cy - h * 0.15, cx - h * 0.2, cy + h * 0.15,
                            fill=bg_cut, outline="")
             cv.create_oval(cx + h * 0.2, cy - h * 0.15, cx + h * 0.55, cy + h * 0.15,
@@ -3044,66 +3244,66 @@ class CleanerApp:
             cv.create_polygon([cx, cy - h, cx + h * 0.4, cy - h * 0.35,
                                 cx + h * 0.4, cy + h * 0.55, cx - h * 0.4, cy + h * 0.55,
                                 cx - h * 0.4, cy - h * 0.35],
-                              fill="white", outline="")
+                              fill=color, outline="")
             cv.create_polygon([cx - h * 0.4, cy + h * 0.2, cx - h, cy + h * 0.9,
                                 cx - h * 0.4, cy + h * 0.55],
-                              fill="white", outline="")
+                              fill=color, outline="")
             cv.create_polygon([cx + h * 0.4, cy + h * 0.2, cx + h, cy + h * 0.9,
                                 cx + h * 0.4, cy + h * 0.55],
-                              fill="white", outline="")
+                              fill=color, outline="")
             cv.create_polygon([cx - h * 0.25, cy + h * 0.7, cx, cy + h * 1.05,
                                 cx + h * 0.25, cy + h * 0.7],
-                              fill="white", outline="")
+                              fill=color, outline="")
         elif kind == "gear":  # 系统设置
             import math as _m
             cv.create_oval(cx - h * 0.7, cy - h * 0.7, cx + h * 0.7, cy + h * 0.7,
-                           fill="white", outline="")
+                           fill=color, outline="")
             for i in range(8):
                 a = i * _m.pi / 4
                 x1 = cx + _m.cos(a) * h * 0.7
                 y1 = cy + _m.sin(a) * h * 0.7
                 x2 = cx + _m.cos(a) * h * 1.05
                 y2 = cy + _m.sin(a) * h * 1.05
-                cv.create_line(x1, y1, x2, y2, fill="white", width=3)
+                cv.create_line(x1, y1, x2, y2, fill=color, width=3)
             cv.create_oval(cx - h * 0.35, cy - h * 0.35, cx + h * 0.35, cy + h * 0.35,
-                           fill=bg_cut, outline="white", width=1)
+                           fill=bg_cut, outline=color, width=1)
         elif kind == "globe":  # 外部工具
-            cv.create_oval(cx - h, cy - h, cx + h, cy + h, outline="white", width=2)
+            cv.create_oval(cx - h, cy - h, cx + h, cy + h, outline=color, width=2)
             cv.create_oval(cx - h * 0.35, cy - h, cx + h * 0.35, cy + h,
-                           outline="white", width=1.5)
-            cv.create_line(cx - h, cy, cx + h, cy, fill="white", width=1.5)
-            cv.create_line(cx, cy - h, cx, cy + h, fill="white", width=1.5)
+                           outline=color, width=1.5)
+            cv.create_line(cx - h, cy, cx + h, cy, fill=color, width=1.5)
+            cv.create_line(cx, cy - h, cx, cy + h, fill=color, width=1.5)
         elif kind == "monitor":  # 系统工具
             cv.create_rectangle(cx - h, cy - h * 0.7, cx + h, cy + h * 0.4,
-                                outline="white", width=2)
+                                outline=color, width=2)
             cv.create_polygon([cx - h * 0.4, cy + h * 0.4, cx - h * 0.3, cy + h * 0.85,
                                 cx + h * 0.3, cy + h * 0.85, cx + h * 0.4, cy + h * 0.4],
-                              fill="white", outline="")
+                              fill=color, outline="")
             cv.create_line(cx - h * 0.65, cy + h * 0.95, cx + h * 0.65, cy + h * 0.95,
-                           fill="white", width=2)
+                           fill=color, width=2)
         elif kind == "document":  # 导出报告
             cv.create_rectangle(cx - h * 0.65, cy - h, cx + h * 0.7, cy + h,
-                                outline="white", width=2)
+                                outline=color, width=2)
             cv.create_line(cx - h * 0.35, cy - h * 0.5, cx + h * 0.4, cy - h * 0.5,
-                           fill="white", width=2)
+                           fill=color, width=2)
             cv.create_line(cx - h * 0.35, cy, cx + h * 0.4, cy,
-                           fill="white", width=2)
+                           fill=color, width=2)
             cv.create_line(cx - h * 0.35, cy + h * 0.5, cx + h * 0.4, cy + h * 0.5,
-                           fill="white", width=2)
+                           fill=color, width=2)
         elif kind == "trophy":  # 我的战报
             cv.create_polygon([cx - h * 0.5, cy - h, cx + h * 0.5, cy - h,
                                 cx + h * 0.5, cy + h * 0.1, cx + h * 0.3, cy + h * 0.45,
                                 cx - h * 0.3, cy + h * 0.45, cx - h * 0.5, cy + h * 0.1],
-                              fill="white", outline="")
+                              fill=color, outline="")
             cv.create_oval(cx - h * 0.95, cy - h * 0.75, cx - h * 0.5, cy - h * 0.1,
-                           outline="white", width=2)
+                           outline=color, width=2)
             cv.create_oval(cx + h * 0.5, cy - h * 0.75, cx + h * 0.95, cy - h * 0.1,
-                           outline="white", width=2)
+                           outline=color, width=2)
             cv.create_polygon([cx - h * 0.4, cy + h * 0.45, cx + h * 0.4, cy + h * 0.45,
                                 cx + h * 0.4, cy + h * 0.65, cx - h * 0.4, cy + h * 0.65],
-                              fill="white", outline="")
+                              fill=color, outline="")
             cv.create_rectangle(cx - h * 0.6, cy + h * 0.65, cx + h * 0.6, cy + h * 0.95,
-                                fill="white", outline="")
+                                fill=color, outline="")
 
     def _make_tool_card(self, parent, icon, title, subtitle, cfrom, cto, command, wide=False):
         """圆角彩色工具卡片（Canvas 自绘图标 · 等大 26×26 · 等高 78px）。
@@ -3146,7 +3346,7 @@ class CleanerApp:
                                  bg_cut=self.COLOR_CARD)
             cv.create_text(text_x, h * 0.36, text=title,
                            font=("Microsoft YaHei UI", title_size, "bold"),
-                           fill="white", anchor="w")
+                           fill=color, anchor="w")
             cv.create_text(text_x, h * 0.68, text=subtitle,
                            font=("Microsoft YaHei UI", sub_size),
                            fill="#e2e8f0", anchor="w")
