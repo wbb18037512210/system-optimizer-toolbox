@@ -2180,7 +2180,7 @@ class CleanerApp:
                  font=self.FONT_SUB,
                  bg=self.COLOR_BG, fg=self.COLOR_TEXT2).pack(anchor="w", pady=(2, 0))
 
-        # 操作区（右）
+        # 操作区（右）：管理员徽章 + 深色模式 + 战报与扩展（4 个文字按钮并排）
         right = tk.Frame(top, bg=self.COLOR_BG)
         right.pack(side="right")
         self.admin_badge = tk.Label(right, text="  ",
@@ -2197,24 +2197,26 @@ class CleanerApp:
         self.theme_btn.pack(side="right", anchor="e", padx=(8, 0))
         self.theme_btn.bind("<Button-1>", lambda e: self._apply_theme())
 
-        def _short(icon, command):
-            b = tk.Label(right, text=icon, font=("Segoe UI Emoji", 14),
+        # 战报与扩展：与「深色模式」同款卡片按钮并排（我的战报/导出报告/磁盘地图/设置中心）
+        def _ext_btn(text, command, tooltip):
+            b = tk.Label(right, text=text,
+                         font=self.FONT_BTN_S,
                          bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
-                         cursor="hand2", padx=4, pady=3,
+                         padx=10, pady=4, cursor="hand2",
                          highlightthickness=1, highlightbackground=self.COLOR_BORDER)
             b.pack(side="right", anchor="e", padx=(8, 0))
             b.bind("<Button-1>", lambda e: command())
-
-            def on_enter(e):
-                b.configure(bg=self.T["accent_t"], fg=self.COLOR_ACCENT,
-                            highlightbackground=self.T["border_strong"])
-            def on_leave(e):
-                b.configure(bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
-                            highlightbackground=self.COLOR_BORDER)
-            b.bind("<Enter>", on_enter)
-            b.bind("<Leave>", on_leave)
-        _short("⚙", self.open_settings)
-        _short("💽", self.open_diskmap)
+            try:
+                b.bind("<Enter>", lambda e: b.configure(bg=self.T["accent_t"], fg=self.COLOR_ACCENT,
+                                                        highlightbackground=self.T["border_strong"]))
+                b.bind("<Leave>", lambda e: b.configure(bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                                                        highlightbackground=self.COLOR_BORDER))
+            except Exception:
+                pass
+        _ext_btn("设置中心", self.open_settings, "打开设置")
+        _ext_btn("磁盘地图", self.open_diskmap, "磁盘占用可视化")
+        _ext_btn("导出报告", self._export_report, "导出清理报告")
+        _ext_btn("我的战报", self.open_stats, "成就与统计")
 
         # ---- 2. 紧凑状态条 ----
         self._build_compact_dashboard()
@@ -2298,7 +2300,7 @@ class CleanerApp:
                 g.columnconfigure(c, weight=1)
             return g
 
-        # ---- 左上：系统快捷工具（9 项）----
+        # ---- 左：系统快捷工具（9 项）----
         sec1, body1 = _section("系统快捷工具", "9 项")
         sec1.grid(row=0, column=0, sticky="nsew", padx=(2, 3), pady=2)
         g1 = _grid(body1)
@@ -2318,7 +2320,7 @@ class CleanerApp:
             self._make_icon_button(g1, kind, text, cmd).grid(
                 row=r, column=c, padx=2, pady=2, sticky="ew")
 
-        # ---- 右上：优化与卸载面板（4 项）----
+        # ---- 右：优化与卸载面板（4 项）----
         sec2, body2 = _section("优化与卸载面板", "4 项")
         sec2.grid(row=0, column=1, sticky="nsew", padx=3, pady=2)
         g2 = _grid(body2)
@@ -2333,24 +2335,10 @@ class CleanerApp:
             self._make_icon_button(g2, kind, text, cmd).grid(
                 row=r, column=c, padx=2, pady=2, sticky="ew")
 
-        # ---- 左下：战报与扩展（战报 + 统计 + 磁盘地图）----
-        sec3, body3 = _section("战报与扩展", "")
-        sec3.grid(row=1, column=0, sticky="nsew", padx=(2, 3), pady=2)
-        g3 = _grid(body3)
-        ext_tools = [
-            ("trophy",   "我的战报",     self.open_stats),
-            ("document", "导出报告",     self._export_report),
-            ("monitor",  "磁盘地图",     self.open_diskmap),
-            ("gear",     "设置中心",     self.open_settings),
-        ]
-        for i, (kind, text, cmd) in enumerate(ext_tools):
-            r, c = i // 2, i % 2
-            self._make_icon_button(g3, kind, text, cmd).grid(
-                row=r, column=c, padx=2, pady=2, sticky="ew")
-
-        # ---- 右下：一键优化（15 项，需管理员）----
+        # ---- 下（跨两列）：一键优化（15 项，需管理员）----
+        # 说明：战报与扩展已移至顶栏（与深色模式并排），此处分组仅保留一键优化
         sec4, body4 = _section("一键优化", "15 项 · 需管理员")
-        sec4.grid(row=1, column=1, sticky="nsew", padx=3, pady=2)
+        sec4.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=(2, 2), pady=2)
         warn_frame = tk.Frame(body4, bg=self.T.get("warn_t", "#FEF3E6"),
                               highlightthickness=1,
                               highlightbackground=self.T.get("opt_border", "#F5C4A1"))
