@@ -1984,12 +1984,12 @@ class CleanerApp:
         box.pack(fill="x", padx=6, pady=(6, 6))
         inner = tk.Frame(box, bg=self.COLOR_CARD)
         inner.pack(fill="x", padx=12, pady=8)
-        self.health_cv = tk.Canvas(inner, width=96, height=96, bg=self.COLOR_CARD,
+        self.health_cv = tk.Canvas(inner, width=84, height=84, bg=self.COLOR_CARD,
                                    highlightthickness=0, bd=0)
         self.health_cv.pack(side="left")
         info = tk.Frame(inner, bg=self.COLOR_CARD)
-        info.pack(side="left", padx=(14, 0), fill="both", expand=True)
-        self.health_val = tk.Label(info, text="健康分 --", font=("Microsoft YaHei UI", 17, "bold"),
+        info.pack(side="left", padx=(12, 0), fill="both", expand=True)
+        self.health_val = tk.Label(info, text="健康分 --", font=("Microsoft YaHei UI", 16, "bold"),
                                    bg=self.COLOR_CARD, fg=self.COLOR_TEXT)
         self.health_val.pack(anchor="w")
         self.health_lvl = tk.Label(info, text="扫描后自动评估系统状态", font=("Microsoft YaHei UI", 9),
@@ -2004,18 +2004,18 @@ class CleanerApp:
         try:
             cv = self.health_cv
             cv.delete("all")
-            W = H = 96
-            cx, cy, R = W / 2, H / 2, 36
+            W = H = 84
+            cx, cy, R = W / 2, H / 2, 32
             start, span = 135, -270
             cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start, extent=span,
-                          style="arc", outline=self.T["gauge_track"], width=8)
+                          style="arc", outline=self.T["gauge_track"], width=7)
             col = getattr(self, "_gauge_color", "#10b981")
             cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start,
                           extent=span * max(0, min(100, score)) / 100.0,
-                          style="arc", outline=col, width=8)
-            cv.create_text(cx, cy - 4, text=str(score), font=("Microsoft YaHei UI", 18, "bold"),
+                          style="arc", outline=col, width=7)
+            cv.create_text(cx, cy - 4, text=str(score), font=("Microsoft YaHei UI", 16, "bold"),
                            fill=self.COLOR_TEXT)
-            cv.create_text(cx, cy + 18, text="健康分", font=("Microsoft YaHei UI", 9),
+            cv.create_text(cx, cy + 16, text="健康分", font=("Microsoft YaHei UI", 8),
                            fill=self.COLOR_TEXT2)
         except Exception:
             pass
@@ -2163,11 +2163,11 @@ class CleanerApp:
             self._gauge_draw(cv, 0, color)
 
         # 历史迷你柱
-        self.hist_cv = tk.Canvas(box, height=46, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
+        self.hist_cv = tk.Canvas(box, height=54, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
         self.hist_cv.pack(fill="x", padx=6, pady=(2, 2))
 
         # 底部 sparkline
-        self.mon_cv = tk.Canvas(box, height=32, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
+        self.mon_cv = tk.Canvas(box, height=30, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
         self.mon_cv.pack(fill="x", padx=6, pady=(0, 5))
         self._hist_draw()
         self._mon_tick()
@@ -2743,12 +2743,14 @@ class CleanerApp:
             cv._bg_item = bg
 
             # —— 等比例缩放：所有尺寸基于卡片实际宽度 w ——
+            # 限制 emoji 字号上限 ≤36，避免 Windows 在大字号时回退到
+            # Segoe UI Symbol 单色段字形（导致显示成大轮廓图标、不"横平竖直"）
             r = w / REF_W                                  # 缩放比
-            emoji_size  = max(20, int(40 * r))             # ≈ h×0.45 @ REF_W
-            title_size  = max(9,  int(12 * r))
-            sub_size    = max(7,  int(9 * r))
+            emoji_size  = max(18, min(34, int(36 * r)))     # 字号上限 34
+            title_size  = max(9,  int(11 * r))
+            sub_size    = max(7,  int(9  * r))
             icon_cx     = int(w * 0.16)                    # 图标水平中心
-            text_x      = int(w * 0.28)                    # 文字左对齐起点
+            text_x      = int(w * 0.30)                    # 文字左对齐起点
             cv.create_text(icon_cx, h / 2, text=icon,
                            font=("Segoe UI Emoji", emoji_size), fill="white", anchor="center")
             cv.create_text(text_x, h * 0.36, text=title,
@@ -2787,6 +2789,7 @@ class CleanerApp:
             grid.columnconfigure(c, weight=1)
 
         # (icon, title, subtitle, cfrom, cto, command)
+        # 工具卡 12 张（磁盘地图 / 设置中心改为顶栏快捷入口，避免 3 列下溢出挤掉右栏）
         tools = [
             ("⚡", "一键优化", "全自动维护", (0x25, 0x63, 0xeb), (0x0e, 0xa5, 0xe9), self.open_optduck),
             ("🛡", "进程拦截", "广告/挖矿拦截", (0x63, 0x66, 0xf1), (0x8b, 0x5c, 0xf6), self.open_process_block),
@@ -2796,12 +2799,10 @@ class CleanerApp:
             ("🎮", "GPU 配置", "显卡调度", (0xec, 0x48, 0x99), (0xf4, 0x3f, 0x5e), self.open_gpu),
             ("🚀", "启动项", "开机加速", (0x0d, 0x94, 0x88), (0x0e, 0xa5, 0xe9), self.open_startup),
             ("⚙", "系统设置", "高级/网络", (0x47, 0x55, 0x69), (0x64, 0x74, 0x8b), self.open_godmode),
-            ("💽", "磁盘地图", "空间占比", (0xea, 0x58, 0x0c), (0xf9, 0x73, 0x16), self.open_diskmap),
             ("🌐", "外部工具", "Win10/360", (0x25, 0x63, 0xeb), (0x38, 0xbd, 0xf8), self.open_external_tools),
             ("🖥", "系统工具", "控制面板", (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools),
             ("📄", "导出报告", "导出结果", (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report),
             ("🏆", "我的战报", "成就图表", (0x7c, 0x3a, 0xed), (0xc0, 0x26, 0xd3), self.open_stats),
-            ("⚙️", "设置中心", "偏好配置", (0x64, 0x74, 0x8b), (0x94, 0xa3, 0xb8), self.open_settings),
         ]
         # 流式布局（3 列等宽，避免 columnspan 引起的 Canvas 虚拟宽度不触发 Configure 陷阱）
         COLS = 3
@@ -2876,20 +2877,34 @@ class CleanerApp:
                  font=("Microsoft YaHei UI", 9),
                  bg=self.COLOR_BG, fg=self.COLOR_TEXT2).pack(anchor="w")
 
-        # 右侧：主题切换按钮 + 管理员徽章
+        # 右侧：顶栏快捷入口（磁盘地图 / 设置中心）+ 主题切换 + 管理员徽章
         right = tk.Frame(top, bg=self.COLOR_BG)
         right.pack(side="right")
+        self.admin_badge = tk.Label(right, text="  ",
+                                    font=("Microsoft YaHei UI", 9, "bold"),
+                                    bg=self.COLOR_ACCENT2, fg="#ffffff",
+                                    padx=8, pady=2)
+        self.admin_badge.pack(side="right", anchor="e")
         self.theme_btn = tk.Label(right, text="🌙 深色", font=("Microsoft YaHei UI", 9, "bold"),
                                   bg=self.COLOR_CARD, fg=self.COLOR_TEXT, padx=10, pady=3,
                                   cursor="hand2", highlightthickness=1,
                                   highlightbackground=self.COLOR_BORDER)
         self.theme_btn.pack(side="right", anchor="e", padx=(8, 0))
         self.theme_btn.bind("<Button-1>", lambda e: self._apply_theme())
-        self.admin_badge = tk.Label(right, text="  ",
-                                    font=("Microsoft YaHei UI", 9, "bold"),
-                                    bg=self.COLOR_ACCENT2, fg="#ffffff",
-                                    padx=8, pady=2)
-        self.admin_badge.pack(side="right", anchor="e")
+
+        def _short(icon, title, command):
+            b = tk.Label(right, text=icon, font=("Segoe UI Emoji", 16),
+                         bg=self.COLOR_BG, fg=self.COLOR_TEXT, cursor="hand2",
+                         padx=6, pady=1)
+            b.pack(side="right", anchor="e", padx=(6, 0))
+            b.bind("<Button-1>", lambda e: command())
+            try:
+                b.bind("<Enter>", lambda e: b.configure(fg=self.COLOR_ACCENT))
+                b.bind("<Leave>", lambda e: b.configure(fg=self.COLOR_TEXT))
+            except Exception:
+                pass
+        _short("⚙", "设置中心", self.open_settings)
+        _short("💽", "磁盘地图", self.open_diskmap)
 
         # 细分割线，弱化但保留
         tk.Frame(self.root, bg=self.COLOR_BORDER, height=1).pack(fill="x", padx=14, pady=(2, 6))
@@ -2903,9 +2918,10 @@ class CleanerApp:
         main.columnconfigure(1, weight=1)
         main.rowconfigure(0, weight=1)
 
-        # 左：健康分 + 工具卡片 + 监控
-        left = ttk.Frame(main, style="Card.TFrame")
+        # 左：健康分 + 工具卡片 + 监控（锁定宽度 420，禁止内容撑大后挤压右栏）
+        left = ttk.Frame(main, style="Card.TFrame", width=420)
         left.grid(row=0, column=0, sticky="nsew", padx=(4, 8))
+        left.pack_propagate(False)
         self._build_left_column(left)
 
         # 右：清理项目 + 日志（垂直分栏）
