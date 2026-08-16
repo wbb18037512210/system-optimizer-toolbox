@@ -1971,11 +1971,10 @@ class CleanerApp:
         self._update_status_bar()
         self._log(f"已切换至「{self.T['name']}」主题", "ok")
 
-    # ================= v4.0 智能版：左栏组合（健康分 + 卡片 + 监控） =================
+    # ================= v6.0 已废弃旧版仪表盘占位（旧 _build_left_column 调用链已移除） =================
     def _build_left_column(self, parent):
-        self._build_health_widget(parent)
-        self._build_tool_cards(parent)
-        self._build_monitor_widget(parent)
+        # v6.0 改为单窗口布局，不再分左右栏。本方法仅为兼容旧逻辑保留空壳。
+        pass
 
     # ---- 健康分仪表盘（Canvas 大圆环 + 动效）----
     def _build_health_widget(self, parent):
@@ -2131,46 +2130,338 @@ class CleanerApp:
         except Exception:
             pass
 
-    # ================= v4.0 智能版：实时资源监控 =================
-    def _build_monitor_widget(self, parent):
+    # ================= v6.0 经典智能版：UI 构建 =================
+    def _build_ui(self):
+        # ---- 1. 顶栏（标题 + 副标题 + 主题切换 + 快捷入口 + 管理员徽章）----
+        top = tk.Frame(self.root, bg=self.COLOR_BG)
+        top.pack(fill="x", padx=14, pady=(8, 4))
         try:
-            if self._mon_after:
-                self.root.after_cancel(self._mon_after)
-                self._mon_after = None
+            from PIL import Image, ImageDraw, ImageTk
+            _logo_img = Image.new("RGBA", (40, 40), (37, 99, 235, 255))
+            _d = ImageDraw.Draw(_logo_img)
+            _d.ellipse((0, 0, 40, 40), fill=(37, 99, 235, 255))
+            _tk_logo = ImageTk.PhotoImage(_logo_img)
         except Exception:
-            pass
-        box = tk.Frame(parent, bg=self.COLOR_CARD,
-                       highlightthickness=1, highlightbackground=self.COLOR_BORDER, bd=0)
-        box.pack(fill="x", padx=6, pady=(0, 6))
+            _tk_logo = None
+        logo_box = tk.Frame(top, bg=self.COLOR_BG)
+        logo_box.pack(side="left")
+        if _tk_logo is not None:
+            tk.Label(logo_box, image=_tk_logo, bg=self.COLOR_BG).pack(side="left")
+            self._logo_ref = _tk_logo
+        else:
+            tk.Label(logo_box, text="🛠", font=("Segoe UI Emoji", 20),
+                     bg=self.COLOR_ACCENT, fg="#ffffff", width=2).pack(side="left")
+        title_box = tk.Frame(top, bg=self.COLOR_BG)
+        title_box.pack(side="left", padx=(10, 0))
+        tk.Label(title_box, text="系统优化工具箱",
+                 font=("Microsoft YaHei UI", 15, "bold"),
+                 bg=self.COLOR_BG, fg=self.COLOR_TEXT).pack(anchor="w")
+        tk.Label(title_box, text="轻巧专注的 Windows 维护套件 · v6.0 经典智能版",
+                 font=("Microsoft YaHei UI", 9),
+                 bg=self.COLOR_BG, fg=self.COLOR_TEXT2).pack(anchor="w")
+        right = tk.Frame(top, bg=self.COLOR_BG)
+        right.pack(side="right")
+        self.admin_badge = tk.Label(right, text="  ",
+                                    font=("Microsoft YaHei UI", 9, "bold"),
+                                    bg=self.COLOR_ACCENT2, fg="#ffffff", padx=8, pady=2)
+        self.admin_badge.pack(side="right", anchor="e")
+        self.theme_btn = tk.Label(right, text="🌙 深色", font=("Microsoft YaHei UI", 9, "bold"),
+                                  bg=self.COLOR_CARD, fg=self.COLOR_TEXT, padx=10, pady=3,
+                                  cursor="hand2", highlightthickness=1,
+                                  highlightbackground=self.COLOR_BORDER)
+        self.theme_btn.pack(side="right", anchor="e", padx=(8, 0))
+        self.theme_btn.bind("<Button-1>", lambda e: self._apply_theme())
 
-        # 三环资源条：CPU / RAM / 磁盘
-        gauges = tk.Frame(box, bg=self.COLOR_CARD)
-        gauges.pack(fill="x", padx=8, pady=(6, 2))
+        def _short(icon, command):
+            b = tk.Label(right, text=icon, font=("Segoe UI Emoji", 15),
+                         bg=self.COLOR_BG, fg=self.COLOR_TEXT, cursor="hand2", padx=4)
+            b.pack(side="right", anchor="e", padx=(4, 0))
+            b.bind("<Button-1>", lambda e: command())
+            try:
+                b.bind("<Enter>", lambda e: b.configure(fg=self.COLOR_ACCENT))
+                b.bind("<Leave>", lambda e: b.configure(fg=self.COLOR_TEXT))
+            except Exception:
+                pass
+        _short("⚙", self.open_settings)
+        _short("💽", self.open_diskmap)
+
+        # ---- 2. 紧凑状态条：健康分环 + CPU/RAM/Disk 三环 + 摘要文本 ----
+        self._build_compact_dashboard()
+
+        # ---- 3. 主分割：左侧工具网格 + 右侧清理 + 日志（ttk.PanedWindow 可拖动分隔条）----
+        self._paned = ttk.PanedWindow(self.root, orient="horizontal")
+        self._paned.pack(fill="both", expand=True, padx=8, pady=(0, 4))
+
+        left_outer = ttk.Frame(self._paned)
+        self._paned.add(left_outer, weight=6)   # 左 60%
+
+        # 左侧滚动容器（如果工具按钮太多，保证不撑高）
+        left_canvas = tk.Canvas(left_outer, bd=0, highlightthickness=0, bg=self.COLOR_BG)
+        left_scroll = ttk.Scrollbar(left_outer, orient="vertical", command=left_canvas.yview)
+        left_canvas.configure(yscrollcommand=left_scroll.set)
+        left_scroll.pack(side="right", fill="y")
+        left_canvas.pack(side="left", fill="both", expand=True)
+        left_inner = ttk.Frame(left_canvas)
+        left_canvas.create_window((0, 0), window=left_inner, anchor="nw")
+        left_inner.bind("<Configure>",
+                        lambda e: left_canvas.configure(scrollregion=left_canvas.bbox("all")))
+
+        self._build_tools_panel(left_inner)
+
+        right_outer = ttk.Frame(self._paned)
+        self._paned.add(right_outer, weight=4)   # 右 40%
+        self._build_cleanup_panel(right_outer)
+        self._build_log_into(right_outer)
+
+        # ---- 4. 底部状态栏 ----
+        self._build_status_bar()
+
+        # ---- 5. 启动定时器 ----
+        self._mon_after = None
+        self._mon_tick()
+
+    # ================= v6.0 紧凑状态条 =================
+    def _build_compact_dashboard(self):
+        strip = tk.Frame(self.root, bg=self.COLOR_CARD, highlightthickness=1,
+                         highlightbackground=self.COLOR_BORDER, bd=0)
+        strip.pack(fill="x", padx=10, pady=(0, 6))
+        inner = tk.Frame(strip, bg=self.COLOR_CARD)
+        inner.pack(fill="x", padx=10, pady=8)
+
+        # 健康分小环
+        self.health_cv = tk.Canvas(inner, width=44, height=44, bg=self.COLOR_CARD,
+                                   highlightthickness=0, bd=0)
+        self.health_cv.pack(side="left")
+        self._gauge_color = "#10b981"
+        self._health_draw(0)
+
+        self.health_val = tk.Label(inner, text="健康分 --", font=("Microsoft YaHei UI", 13, "bold"),
+                                   bg=self.COLOR_CARD, fg=self.COLOR_TEXT)
+        self.health_val.pack(side="left", padx=(8, 4))
+        self.health_lvl = tk.Label(inner, text="未评估", font=("Microsoft YaHei UI", 9),
+                                   bg=self.COLOR_CARD, fg=self.COLOR_TEXT2)
+        self.health_lvl.pack(side="left", padx=(0, 16))
+
+        # 分隔
+        tk.Frame(inner, bg=self.COLOR_BORDER, width=1).pack(side="left", fill="y", padx=2)
+
+        # 三环：CPU / RAM / 磁盘（小，36px）
         self._gauge_cvs = {}
         self._gauge_lbls = {}
-        for key, color in (("cpu", self.COLOR_ACCENT), ("ram", self.COLOR_ACCENT2),
-                           ("disk", self.COLOR_WARN)):
-            cell = tk.Frame(gauges, bg=self.COLOR_CARD)
-            cell.pack(side="left", expand=True, fill="x")
-            cv = tk.Canvas(cell, width=40, height=40, bg=self.COLOR_CARD,
-                           highlightthickness=0, bd=0)
-            cv.pack(side="top")
-            lbl = tk.Label(cell, text="--%", bg=self.COLOR_CARD, fg=self.COLOR_TEXT2,
-                           font=("Microsoft YaHei UI", 8))
-            lbl.pack(side="top")
+        for key, color, txt in (("cpu", self.COLOR_ACCENT, "CPU"),
+                                  ("ram", self.COLOR_ACCENT2, "内存"),
+                                  ("disk", self.COLOR_WARN, "磁盘")):
+            cell = tk.Frame(inner, bg=self.COLOR_CARD)
+            cell.pack(side="left", padx=(10, 0))
+            cv = tk.Canvas(cell, width=36, height=36, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
+            cv.pack(side="left")
+            lbl = tk.Label(cell, text="--", bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                           font=("Microsoft YaHei UI", 9, "bold"))
+            lbl.pack(side="left", padx=(4, 0))
             self._gauge_cvs[key] = cv
             self._gauge_lbls[key] = lbl
             self._gauge_draw(cv, 0, color)
 
-        # 历史迷你柱
-        self.hist_cv = tk.Canvas(box, height=54, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
-        self.hist_cv.pack(fill="x", padx=6, pady=(2, 2))
+        # 分隔
+        tk.Frame(inner, bg=self.COLOR_BORDER, width=1).pack(side="left", fill="y", padx=10)
 
-        # 底部 sparkline
-        self.mon_cv = tk.Canvas(box, height=30, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
-        self.mon_cv.pack(fill="x", padx=6, pady=(0, 5))
-        self._hist_draw()
-        self._mon_tick()
+        # 摘要：累计释放 + 清理次数 + 权限
+        self.summary_lbl = tk.Label(inner, text="就绪",
+                                    font=("Microsoft YaHei UI", 9),
+                                    bg=self.COLOR_CARD, fg=self.COLOR_TEXT2)
+        self.summary_lbl.pack(side="left", padx=(0, 8))
+
+        # 智能一键 + 扫描 + 清理 + 导出快捷操作放在状态条右端
+        actions = tk.Frame(inner, bg=self.COLOR_CARD)
+        actions.pack(side="right")
+        ttk.Button(actions, text="✨ 智能一键", command=self._smart_clean,
+                   style="Smart.TButton").pack(side="left", padx=2)
+        ttk.Button(actions, text="🔍 扫描", command=self._scan,
+                   style="Primary.TButton").pack(side="left", padx=2)
+        ttk.Button(actions, text="🚀 清理", command=self._ask_clean,
+                   style="Action.TButton").pack(side="left", padx=2)
+
+    def _update_summary(self):
+        try:
+            sessions = self._load_stats()
+            total_mb = sum(s.get("freed_mb", 0) for s in sessions)
+            perm = "管理员" if is_admin() else "普通权限"
+            self.summary_lbl.configure(
+                text=f"累计释放 {human_size(int(total_mb * 1048576))} ｜ "
+                     f"清理 {len(sessions)} 次 ｜ 权限：{perm}")
+        except Exception:
+            pass
+
+    # ================= v6.0 工具面板（左侧滚动区） =================
+    def _make_icon_button(self, parent, kind, text, command):
+        """紧凑型工具按钮：18px Canvas 自绘图标 + 文字，可放入 2 列网格。"""
+        bg = self.COLOR_CARD
+        bg_hov = self.T["btn_active"]
+        f = tk.Frame(parent, bg=bg, cursor="hand2", highlightthickness=1,
+                     highlightbackground=self.COLOR_BORDER)
+        f.bind("<Button-1>", lambda e: command())
+        inner = tk.Frame(f, bg=bg)
+        inner.pack(padx=10, pady=5, fill="x")
+        cv = tk.Canvas(inner, width=18, height=18, bg=bg, highlightthickness=0, bd=0)
+        cv.pack(side="left")
+        self._draw_card_icon(cv, kind, 9, 9, s=14, bg_cut=bg)
+        lbl = tk.Label(inner, text=text, bg=bg, fg=self.COLOR_TEXT,
+                       font=("Microsoft YaHei UI", 9.5))
+        lbl.pack(side="left", padx=(6, 0))
+        lbl.bind("<Button-1>", lambda e: command())
+
+        def on_enter(e):
+            for w in (f, inner, cv, lbl):
+                try:
+                    w.configure(bg=bg_hov)
+                except Exception:
+                    pass
+        def on_leave(e):
+            for w in (f, inner, cv, lbl):
+                try:
+                    w.configure(bg=bg)
+                except Exception:
+                    pass
+        for w in (f, inner, cv, lbl):
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+        return f
+
+    def _build_tools_panel(self, parent):
+        """左侧工具面板：系统工具（2 列网格）+ 一键优化（2 列网格）。"""
+        # 系统快捷工具
+        sec1 = ttk.LabelFrame(parent, text="  🖥  系统快捷工具  ", padding=8,
+                               style="Card.TLabelframe")
+        sec1.pack(fill="x", pady=(0, 8))
+        intro1 = tk.Label(sec1, text="以下按钮直接调用 Windows 自带工具：",
+                          bg=self.COLOR_CARD, fg=self.COLOR_TEXT2,
+                          font=("Microsoft YaHei UI", 8.5))
+        intro1.pack(anchor="w", pady=(0, 6))
+        grid1 = ttk.Frame(sec1)
+        grid1.pack(fill="x")
+        for c in range(2):
+            grid1.columnconfigure(c, weight=1)
+        sys_tools = [
+            ("monitor",   "控制面板",       lambda: self._open_target("control.exe")),
+            ("rocket",    "任务管理器",     lambda: self._open_target("taskmgr.exe")),
+            ("box",       "卸载程序",       lambda: self._open_target("appwiz.cpl")),
+            ("broom",     "磁盘清理",       lambda: self._open_target("cleanmgr.exe")),
+            ("shield",    "系统信息",       lambda: self._open_target("ms-settings:about")),
+            ("gear",      "设备管理器",     lambda: self._open_target("devmgmt.msc")),
+            ("globe",     "磁盘管理",       lambda: self._open_target("diskmgmt.msc")),
+            ("monitor",   "服务",           lambda: self._open_target("services.msc")),
+            ("box",       "上帝模式",       self.open_godmode),
+        ]
+        for i, (kind, text, cmd) in enumerate(sys_tools):
+            r, c = i // 2, i % 2
+            self._make_icon_button(grid1, kind, text, cmd).grid(
+                row=r, column=c, padx=3, pady=3, sticky="ew")
+
+        # 优化与卸载面板
+        sec2 = ttk.LabelFrame(parent, text="  🧩  优化与卸载面板  ", padding=8,
+                               style="Card.TLabelframe")
+        sec2.pack(fill="x", pady=(0, 8))
+        grid2 = ttk.Frame(sec2)
+        grid2.pack(fill="x")
+        for c in range(2):
+            grid2.columnconfigure(c, weight=1)
+        opt_tools = [
+            ("box",     "卸载预装",     self.open_debloat),
+            ("broom",   "深度优化",     self.open_deep),
+            ("lightning", "Win10 优化", self.launch_win10_optimizer),
+            ("globe",   "360 联网助手", self.launch_net_assist),
+        ]
+        for i, (kind, text, cmd) in enumerate(opt_tools):
+            r, c = i // 2, i % 2
+            self._make_icon_button(grid2, kind, text, cmd).grid(
+                row=r, column=c, padx=3, pady=3, sticky="ew")
+
+        # 一键优化（需管理员）
+        sec3 = ttk.LabelFrame(parent,
+                               text="  ⚡  一键优化（需管理员，执行前会二次确认）  ",
+                               padding=8, style="Card.TLabelframe")
+        sec3.pack(fill="x", pady=(0, 4))
+        warning = tk.Label(sec3,
+                           text="⚠ 高危操作：非管理员将被 UAC 提权，每项执行前二次确认，全部可逆。",
+                           bg=self.COLOR_CARD, fg=self.COLOR_DANGER,
+                           font=("Microsoft YaHei UI", 8.5))
+        warning.pack(anchor="w", pady=(0, 6))
+        grid3 = ttk.Frame(sec3)
+        grid3.pack(fill="x")
+        for c in range(2):
+            grid3.columnconfigure(c, weight=1)
+        one_click = [
+            ("broom",   "清理 DNS 缓存",   self.opt_dns_flush),
+            ("battery", "高性能电源",     self.opt_high_perf),
+            ("battery", "卓越电源",       self.opt_ultimate_perf),
+            ("lightning", "快速启动",     self.opt_fastboot_on),
+            ("lightning", "禁用 SysMain",  self.opt_sysmain_off),
+            ("lightning", "关传递优化",    self.opt_dosvc_off),
+            ("lightning", "关搜索索引",    self.opt_search_off),
+            ("lightning", "关透明动画",    self.opt_visual_off),
+            ("lightning", "关遥测",        self.opt_telemetry_off),
+            ("lightning", "关休眠",        self.opt_hibernate_off),
+            ("shield",  "关防火墙",       self.opt_firewall_off),
+            ("shield",  "关 Defender",    self.opt_defender_off),
+            ("shield",  "关 UAC",         self.opt_uac_off),
+            ("shield",  "关系统还原",     self.opt_system_restore_off),
+            ("shield",  "关 Win 更新",    self.opt_wu_off),
+        ]
+        for i, (kind, text, cmd) in enumerate(one_click):
+            r, c = i // 2, i % 2
+            self._make_icon_button(grid3, kind, text, cmd).grid(
+                row=r, column=c, padx=3, pady=2, sticky="ew")
+
+    # ================= v6.0 精简健康分大环（44px 给状态条） =================
+    def _health_draw(self, score):
+        try:
+            cv = self.health_cv
+            cv.delete("all")
+            W = H = 44
+            cx, cy, R = W / 2, H / 2, 16
+            start, span = 135, -270
+            cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start, extent=span,
+                          style="arc", outline=self.T["gauge_track"], width=4)
+            col = getattr(self, "_gauge_color", "#10b981")
+            cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start,
+                          extent=span * max(0, min(100, score)) / 100.0,
+                          style="arc", outline=col, width=4)
+            cv.create_text(cx, cy, text=str(score), font=("Microsoft YaHei UI", 11, "bold"),
+                           fill=self.COLOR_TEXT)
+        except Exception:
+            pass
+
+    # ================= v6.0 实时监控（轻量化：仅刷新文本，环 3s 刷一次） =================
+    def _gauge_draw(self, cv, pct, color):
+        try:
+            cv.delete("all")
+            W = H = 36
+            cx, cy, R = W / 2, H / 2, 13
+            start, span = 135, -270
+            cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start, extent=span,
+                          style="arc", outline=self.T["gauge_track"], width=4)
+            cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start,
+                          extent=span * max(0.0, min(100.0, pct)) / 100.0,
+                          style="arc", outline=color, width=4)
+        except Exception:
+            pass
+
+    def _gauge_update(self):
+        """三环轻量更新：CPU 每 2s 刷，RAM/Disk 每 3s 刷（避免无谓 IO）。"""
+        try:
+            cpu = self._mon_samples[-1][0] if self._mon_samples else 0.0
+            self._gauge_draw(self._gauge_cvs["cpu"], cpu, self.COLOR_ACCENT)
+            self._gauge_lbls["cpu"].configure(text=f"{cpu:.0f}")
+            if not getattr(self, "_t", 0) % 3:
+                ram = _ram_percent()
+                disk = _disk_usage_pct()
+                self._gauge_draw(self._gauge_cvs["ram"], ram, self.COLOR_ACCENT2)
+                self._gauge_draw(self._gauge_cvs["disk"], disk, self.COLOR_WARN)
+                self._gauge_lbls["ram"].configure(text=f"{ram:.0f}")
+                self._gauge_lbls["disk"].configure(text=f"{disk:.0f}")
+            self._t = (self._t or 0) + 1
+        except Exception:
+            pass
 
     def _mon_tick(self):
         try:
@@ -2183,35 +2474,13 @@ class CleanerApp:
             self._mon_samples.pop(0)
         try:
             self._gauge_update()
-            self._mon_draw()
+            self._update_summary()
         except Exception:
             pass
         try:
             self._mon_after = self.root.after(2000, self._mon_tick)
         except Exception:
             self._mon_after = None
-
-    def _mon_draw(self):
-        try:
-            cv = self.mon_cv
-            w = cv.winfo_width()
-            if w <= 1:
-                w = 220
-            h = 36
-            cv.delete("all")
-            n = len(self._mon_samples)
-            if n < 2:
-                return
-            for idx, color in ((0, self.COLOR_ACCENT), (1, self.COLOR_ACCENT2)):
-                pts = []
-                for i, (cpu, ram) in enumerate(self._mon_samples):
-                    x = 2 + i * (w - 6) / (n - 1)
-                    v = cpu if idx == 0 else ram
-                    y = h - 4 - min(100.0, max(0.0, v)) / 100.0 * (h - 10)
-                    pts += [x, y]
-                cv.create_line(pts, fill=color, width=2, smooth=True)
-        except Exception:
-            pass
 
     # ================= v4.0 智能版：状态栏 =================
     def _build_status_bar(self):
