@@ -2156,7 +2156,7 @@ class CleanerApp:
         tk.Label(title_box, text="系统优化工具箱",
                  font=("Microsoft YaHei UI", 15, "bold"),
                  bg=self.COLOR_BG, fg=self.COLOR_TEXT).pack(anchor="w")
-        tk.Label(title_box, text="轻巧专注的 Windows 维护套件 · v6.0 经典智能版",
+        tk.Label(title_box, text="轻巧专注的 Windows 维护套件 · v6.0 经典智能版 · build 2026-08-16-12",
                  font=("Microsoft YaHei UI", 9),
                  bg=self.COLOR_BG, fg=self.COLOR_TEXT2).pack(anchor="w")
         right = tk.Frame(top, bg=self.COLOR_BG)
@@ -2186,23 +2186,29 @@ class CleanerApp:
         _short("💽", self.open_diskmap)
 
         # ---- 2. 紧凑状态条（健康分 + 三环 + 摘要 + 快捷操作）----
+        # 关键修复：去掉 highlightthickness=1，用更强的边距/背景对比保证可见；
+        # strip.pack_propagate(False) + 显式高度 = 高度确定，不再被父容器压扁。
         self._build_compact_dashboard()
 
-        # ---- 3. 主分割：纯 pack 布局（不用 PanedWindow / 不用 grid+uniform，最朴素）----
-        main = ttk.Frame(self.root)
+        # ---- 3. 主分割：v5.0 验证过的 grid + minsize=420 方案（必须用此模式，否则 ttk/pack 在打包后会丢左栏）----
+        main = tk.Frame(self.root, bg=self.COLOR_BG)
         main.pack(fill="both", expand=True, padx=8, pady=(0, 4))
+        main.grid_columnconfigure(0, minsize=420)   # ← 关键：左栏固定最少 420 宽
+        main.grid_columnconfigure(1, weight=1)       # 右栏弹性
+        main.grid_rowconfigure(0, weight=1)
 
-        # 左 = 工具面板（固定内容宽度，fill=y）
-        left_outer = ttk.Frame(main)
-        left_outer.pack(side="left", fill="y")
+        # 左 = 工具面板（tk.Frame + bg 填充保证可见）
+        left_outer = tk.Frame(main, bg=self.COLOR_CARD,
+                              highlightthickness=1, highlightbackground=self.COLOR_BORDER)
+        left_outer.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=0)
         self._build_tools_panel(left_outer)
 
-        # 右 = 清理 + 日志（expand 撑满剩余空间）
-        right_outer = ttk.Frame(main)
-        right_outer.pack(side="left", fill="both", expand=True, padx=(6, 0))
-        right_outer.columnconfigure(0, weight=1)   # 水平拉伸
-        right_outer.rowconfigure(0, weight=1)      # 清理面板：弹性高度
-        right_outer.rowconfigure(1, weight=0)      # 日志：自然高度
+        # 右 = 清理 + 日志（弹性撑满剩余宽度）
+        right_outer = tk.Frame(main, bg=self.COLOR_BG)
+        right_outer.grid(row=0, column=1, sticky="nsew", pady=0)
+        right_outer.grid_columnconfigure(0, weight=1)
+        right_outer.grid_rowconfigure(0, weight=1)   # 清理面板：弹性高度
+        right_outer.grid_rowconfigure(1, weight=0)   # 日志：自然高度
         self._build_cleanup_panel(right_outer)
         self._build_log_into(right_outer)
 
@@ -2215,11 +2221,14 @@ class CleanerApp:
 
     # ================= v6.0 紧凑状态条 =================
     def _build_compact_dashboard(self):
-        strip = tk.Frame(self.root, bg=self.COLOR_CARD, highlightthickness=1,
-                         highlightbackground=self.COLOR_BORDER, bd=0)
+        # 强制显式高度 + 锁住传播，确保任何打包环境下都不被压成 0
+        strip = tk.Frame(self.root, bg=self.COLOR_CARD,
+                         highlightthickness=1, highlightbackground=self.COLOR_BORDER, bd=0,
+                         height=64)
         strip.pack(fill="x", padx=10, pady=(0, 6))
+        strip.pack_propagate(False)  # 防止子控件撑开/压扁 strip
         inner = tk.Frame(strip, bg=self.COLOR_CARD)
-        inner.pack(fill="x", padx=10, pady=8)
+        inner.pack(fill="both", expand=True, padx=10, pady=8)
 
         # 健康分小环
         self.health_cv = tk.Canvas(inner, width=44, height=44, bg=self.COLOR_CARD,
@@ -2322,17 +2331,20 @@ class CleanerApp:
         return f
 
     def _build_tools_panel(self, parent):
-        """左侧工具面板：纯 pack 布局（无 Canvas 滚动），28 个按钮 2 列网格，
-        总高约 600px，默认 820 窗口完全可见——最朴素、最不可能出错的方案。"""
+        """左侧工具面板：v5.0 验证可用模式——tk.Frame 容器 + grid 2 列按钮。
+        容器全部 tk.Frame + 显式 bg，不再用 ttk.LabelFrame（打包后某些主题会渲染失败）。"""
         # ===== 系统快捷工具 =====
-        sec1 = ttk.LabelFrame(parent, text="  🖥  系统快捷工具  ", padding=6,
-                               style="Card.TLabelframe")
-        sec1.pack(fill="x", pady=(0, 6))
+        sec1 = tk.LabelFrame(parent, text="  🖥  系统快捷工具  ",
+                              bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                              font=("Microsoft YaHei UI", 10, "bold"),
+                              padx=8, pady=6, bd=1, relief="solid",
+                              highlightbackground=self.COLOR_BORDER, highlightthickness=1)
+        sec1.pack(fill="x", pady=(0, 8), padx=4)
         intro1 = tk.Label(sec1, text="以下按钮直接调用 Windows 自带工具：",
                           bg=self.COLOR_CARD, fg=self.COLOR_TEXT2,
                           font=("Microsoft YaHei UI", 8.5))
         intro1.pack(anchor="w", pady=(0, 4))
-        grid1 = ttk.Frame(sec1)
+        grid1 = tk.Frame(sec1, bg=self.COLOR_CARD)
         grid1.pack(fill="x")
         for c in range(2):
             grid1.columnconfigure(c, weight=1)
@@ -2353,10 +2365,13 @@ class CleanerApp:
                 row=r, column=c, padx=2, pady=2, sticky="ew")
 
         # ===== 优化与卸载面板 =====
-        sec2 = ttk.LabelFrame(parent, text="  🧩  优化与卸载面板  ", padding=6,
-                               style="Card.TLabelframe")
-        sec2.pack(fill="x", pady=(0, 6))
-        grid2 = ttk.Frame(sec2)
+        sec2 = tk.LabelFrame(parent, text="  🧩  优化与卸载面板  ",
+                              bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                              font=("Microsoft YaHei UI", 10, "bold"),
+                              padx=8, pady=6, bd=1, relief="solid",
+                              highlightbackground=self.COLOR_BORDER, highlightthickness=1)
+        sec2.pack(fill="x", pady=(0, 8), padx=4)
+        grid2 = tk.Frame(sec2, bg=self.COLOR_CARD)
         grid2.pack(fill="x")
         for c in range(2):
             grid2.columnconfigure(c, weight=1)
@@ -2372,16 +2387,18 @@ class CleanerApp:
                 row=r, column=c, padx=2, pady=2, sticky="ew")
 
         # ===== 一键优化（需管理员） =====
-        sec3 = ttk.LabelFrame(parent,
-                               text="  ⚡  一键优化（需管理员，执行前会二次确认）  ",
-                               padding=6, style="Card.TLabelframe")
-        sec3.pack(fill="x", pady=(0, 2))
+        sec3 = tk.LabelFrame(parent, text="  ⚡  一键优化（需管理员）  ",
+                              bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                              font=("Microsoft YaHei UI", 10, "bold"),
+                              padx=8, pady=6, bd=1, relief="solid",
+                              highlightbackground=self.COLOR_BORDER, highlightthickness=1)
+        sec3.pack(fill="x", pady=(0, 4), padx=4)
         warning = tk.Label(sec3,
                            text="⚠ 高危操作：非管理员将被 UAC 提权，每项执行前二次确认，全部可逆。",
                            bg=self.COLOR_CARD, fg=self.COLOR_DANGER,
-                           font=("Microsoft YaHei UI", 8.5), wraplength=520)
+                           font=("Microsoft YaHei UI", 8.5), wraplength=400)
         warning.pack(anchor="w", pady=(0, 4))
-        grid3 = ttk.Frame(sec3)
+        grid3 = tk.Frame(sec3, bg=self.COLOR_CARD)
         grid3.pack(fill="x")
         for c in range(2):
             grid3.columnconfigure(c, weight=1)
