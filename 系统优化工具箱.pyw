@@ -2223,22 +2223,34 @@ class CleanerApp:
         # 这是用户认可"流畅不卡顿"的布局骨架：
         #   row0 = 4 个工具分组横向并排（弹性宽度，自然高度）
         #   row1 = 可清理项目列表（占满全宽，主要交互区）
-        #   row2 = 运行日志（全宽）
+        #   row0 = 工具区（左侧 2×2 分组）
+        #   row1 = 清理列表（右侧弹性）+ 日志
         main = tk.Frame(self.root, bg=self.COLOR_BG)
         main.pack(fill="both", expand=True, padx=12, pady=(0, 6))
-        for c in range(4):
-            main.grid_columnconfigure(c, weight=1, uniform="cols")
-        main.grid_rowconfigure(0, weight=0)   # 4 分组：自然高度
-        main.grid_rowconfigure(1, weight=1)   # 清理列表：弹性高度
-        main.grid_rowconfigure(2, weight=0)   # 日志：自然高度
+        main.grid_columnconfigure(0, weight=6, minsize=440)   # 左：工具区
+        main.grid_columnconfigure(1, weight=5)                 # 右：清理+日志
+        main.grid_rowconfigure(0, weight=1)
 
-        # 上：4 个功能区分组横排（v7.0 森林绿视觉）
-        self._build_tools_top_row(main)
+        # 左：4 个工具分组 2×2（v7.0 森林绿视觉）
+        left_outer = tk.Frame(main, bg=self.COLOR_BG)
+        left_outer.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=0)
+        left_outer.grid_columnconfigure(0, weight=1, uniform="cols")
+        left_outer.grid_columnconfigure(1, weight=1, uniform="cols")
+        left_outer.grid_rowconfigure(0, weight=1, uniform="rows")
+        left_outer.grid_rowconfigure(1, weight=1, uniform="rows")
+        self._build_tools_top_row(left_outer)
 
-        # 中：可清理项目（全宽卡片）
-        panel = ttk.LabelFrame(main, text="  🧹  可清理项目（勾选后点击扫描）",
+        # 右：可清理项目（弹性高度）+ 运行日志
+        right_outer = tk.Frame(main, bg=self.COLOR_BG)
+        right_outer.grid(row=0, column=1, sticky="nsew", pady=0)
+        right_outer.grid_rowconfigure(0, weight=1)   # 清理列表：弹性
+        right_outer.grid_rowconfigure(1, weight=0)   # 日志：自然高度
+        right_outer.grid_columnconfigure(0, weight=1)
+
+        # 可清理项目（右侧主卡片）
+        panel = ttk.LabelFrame(right_outer, text="  🧹  可清理项目（勾选后点击扫描）",
                                padding=10, style="Card.TLabelframe")
-        panel.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(6, 4), padx=4)
+        panel.grid(row=0, column=0, sticky="nsew", pady=(0, 4), padx=2)
         panel.columnconfigure(0, weight=1)
         self._build_cleanup_list_into(panel)
         ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
@@ -2246,8 +2258,8 @@ class CleanerApp:
         ttk.Separator(panel, orient="horizontal").pack(fill="x", pady=(6, 3))
         self._build_action_buttons_into(panel)
 
-        # 下：运行日志（全宽）
-        self._build_log_into(main)
+        # 运行日志（右下）
+        self._build_log_into(right_outer)
 
         # ---- 4. 底部状态栏 ----
         self._build_status_bar()
@@ -2256,9 +2268,9 @@ class CleanerApp:
         self._mon_after = None
         self._mon_tick()
 
-    # ---- v3.0 布局：顶部 4 分组横排（v7.0 森林绿视觉版）----
+    # ---- 左栏：4 分组 2×2（v7.0 森林绿视觉版）----
     def _build_tools_top_row(self, parent):
-        """4 个工具分组横向并排：系统工具 / 优化面板 / 外部工具 / 一键优化。
+        """4 个工具分组 2×2 排布：系统工具 / 优化面板 / 战报扩展 / 一键优化。
         每个分组用 v7.0 风格：tk.Frame 容器 + 森林绿竖条标题 + Canvas 自绘图标按钮。"""
 
         def _section(title, hint=None):
@@ -2286,7 +2298,7 @@ class CleanerApp:
                 g.columnconfigure(c, weight=1)
             return g
 
-        # ---- 列 1：系统快捷工具（9 项）----
+        # ---- 左上：系统快捷工具（9 项）----
         sec1, body1 = _section("系统快捷工具", "9 项")
         sec1.grid(row=0, column=0, sticky="nsew", padx=(2, 3), pady=2)
         g1 = _grid(body1)
@@ -2306,7 +2318,7 @@ class CleanerApp:
             self._make_icon_button(g1, kind, text, cmd).grid(
                 row=r, column=c, padx=2, pady=2, sticky="ew")
 
-        # ---- 列 2：优化与卸载面板（4 项）----
+        # ---- 右上：优化与卸载面板（4 项）----
         sec2, body2 = _section("优化与卸载面板", "4 项")
         sec2.grid(row=0, column=1, sticky="nsew", padx=3, pady=2)
         g2 = _grid(body2)
@@ -2321,9 +2333,9 @@ class CleanerApp:
             self._make_icon_button(g2, kind, text, cmd).grid(
                 row=r, column=c, padx=2, pady=2, sticky="ew")
 
-        # ---- 列 3：战报与扩展（战报 + 统计 + 磁盘地图）----
+        # ---- 左下：战报与扩展（战报 + 统计 + 磁盘地图）----
         sec3, body3 = _section("战报与扩展", "")
-        sec3.grid(row=0, column=2, sticky="nsew", padx=3, pady=2)
+        sec3.grid(row=1, column=0, sticky="nsew", padx=(2, 3), pady=2)
         g3 = _grid(body3)
         ext_tools = [
             ("trophy",   "我的战报",     self.open_stats),
@@ -2336,9 +2348,9 @@ class CleanerApp:
             self._make_icon_button(g3, kind, text, cmd).grid(
                 row=r, column=c, padx=2, pady=2, sticky="ew")
 
-        # ---- 列 4：一键优化（15 项，需管理员）----
+        # ---- 右下：一键优化（15 项，需管理员）----
         sec4, body4 = _section("一键优化", "15 项 · 需管理员")
-        sec4.grid(row=0, column=3, sticky="nsew", padx=(3, 2), pady=2)
+        sec4.grid(row=1, column=1, sticky="nsew", padx=3, pady=2)
         warn_frame = tk.Frame(body4, bg=self.T.get("warn_t", "#FEF3E6"),
                               highlightthickness=1,
                               highlightbackground=self.T.get("opt_border", "#F5C4A1"))
@@ -3576,10 +3588,10 @@ class CleanerApp:
         self.btn_export = ttk.Button(inner, text="📄 导出报告", command=self._export_report)
         self.btn_export.pack(side="left", padx=5)
 
-    # ---- 底部：运行日志（全宽，卡片化 + 深色对比） ----
+    # ---- 右下：运行日志（卡片化 + 深色对比） ----
     def _build_log_into(self, parent):
         log_frame = ttk.LabelFrame(parent, text="  📜  运行日志", padding=8, style="Card.TLabelframe")
-        log_frame.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 2), padx=4)
+        log_frame.grid(row=1, column=0, sticky="nsew", pady=(4, 2), padx=2)
 
         # 用一块 Frame 包裹 Text，模拟圆角（highlightthickness 留 1 像素浅深边框）
         wrap = tk.Frame(log_frame, bg=self.T["log_bg"],
