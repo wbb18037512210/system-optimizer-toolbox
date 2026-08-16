@@ -2484,7 +2484,7 @@ class CleanerApp:
         self.status_lbl = tk.Label(bar, text="就绪", font=("Microsoft YaHei UI", 9),
                                    bg=self.COLOR_BG, fg=self.COLOR_TEXT2)
         self.status_lbl.pack(side="left")
-        self.status_lbl2 = tk.Label(bar, text="v4.0 智能版", font=("Microsoft YaHei UI", 9, "bold"),
+        self.status_lbl2 = tk.Label(bar, text="v6.0 智能版", font=("Microsoft YaHei UI", 9, "bold"),
                                     bg=self.COLOR_BG, fg=self.COLOR_ACCENT)
         self.status_lbl2.pack(side="right")
 
