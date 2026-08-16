@@ -2130,9 +2130,9 @@ class CleanerApp:
         except Exception:
             pass
 
-    # ================= v6.0 经典智能版：UI 构建 =================
+    # ================= v6.0 经典智能版：UI 构建（经 v3 验证的 grid 布局，告别 PanedWindow） =================
     def _build_ui(self):
-        # ---- 1. 顶栏（标题 + 副标题 + 主题切换 + 快捷入口 + 管理员徽章）----
+        # ---- 1. 顶栏 ----
         top = tk.Frame(self.root, bg=self.COLOR_BG)
         top.pack(fill="x", padx=14, pady=(8, 4))
         try:
@@ -2185,38 +2185,31 @@ class CleanerApp:
         _short("⚙", self.open_settings)
         _short("💽", self.open_diskmap)
 
-        # ---- 2. 紧凑状态条：健康分环 + CPU/RAM/Disk 三环 + 摘要文本 ----
+        # ---- 2. 紧凑状态条（健康分 + 三环 + 摘要 + 快捷操作）----
         self._build_compact_dashboard()
 
-        # ---- 3. 主分割：左侧工具网格 + 右侧清理 + 日志（ttk.PanedWindow 可拖动分隔条）----
-        self._paned = ttk.PanedWindow(self.root, orient="horizontal")
-        self._paned.pack(fill="both", expand=True, padx=8, pady=(0, 4))
+        # ---- 3. 主分割：用 v3 验证过的 grid 布局（不用 PanedWindow）----
+        main = ttk.Frame(self.root)
+        main.pack(fill="both", expand=True)
+        main.columnconfigure(0, weight=1, uniform="cols")
+        main.columnconfigure(1, weight=1, uniform="cols")
+        main.rowconfigure(0, weight=1)
 
-        left_outer = ttk.Frame(self._paned)
-        self._paned.add(left_outer, weight=6)   # 左 60%
+        # 左 = 工具面板（Canvas + 滚动条，安全）
+        left_outer = ttk.Frame(main)
+        left_outer.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=(0, 4))
+        self._build_tools_panel(left_outer)
 
-        # 左侧滚动容器（如果工具按钮太多，保证不撑高）
-        left_canvas = tk.Canvas(left_outer, bd=0, highlightthickness=0, bg=self.COLOR_BG)
-        left_scroll = ttk.Scrollbar(left_outer, orient="vertical", command=left_canvas.yview)
-        left_canvas.configure(yscrollcommand=left_scroll.set)
-        left_scroll.pack(side="right", fill="y")
-        left_canvas.pack(side="left", fill="both", expand=True)
-        left_inner = ttk.Frame(left_canvas)
-        left_canvas.create_window((0, 0), window=left_inner, anchor="nw")
-        left_inner.bind("<Configure>",
-                        lambda e: left_canvas.configure(scrollregion=left_canvas.bbox("all")))
-
-        self._build_tools_panel(left_inner)
-
-        right_outer = ttk.Frame(self._paned)
-        self._paned.add(right_outer, weight=4)   # 右 40%
+        # 右 = 清理 + 日志
+        right_outer = ttk.Frame(main)
+        right_outer.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=(0, 4))
         self._build_cleanup_panel(right_outer)
         self._build_log_into(right_outer)
 
         # ---- 4. 底部状态栏 ----
         self._build_status_bar()
 
-        # ---- 5. 启动定时器 ----
+        # ---- 5. 启动监控定时器 ----
         self._mon_after = None
         self._mon_tick()
 
@@ -2328,9 +2321,27 @@ class CleanerApp:
         return f
 
     def _build_tools_panel(self, parent):
-        """左侧工具面板：系统工具（2 列网格）+ 一键优化（2 列网格）。"""
-        # 系统快捷工具
-        sec1 = ttk.LabelFrame(parent, text="  🖥  系统快捷工具  ", padding=8,
+        """左侧工具面板：Canvas + 滚动条 + 28 个 Canvas 自绘图标按钮。
+        28 个按钮（9 系统 + 4 优化 + 15 一键）通过 Canvas 滚动区承载，绝不撑爆左栏。"""
+        canvas = tk.Canvas(parent, bd=0, highlightthickness=0, bg=self.COLOR_BG)
+        scroll = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        inner = ttk.Frame(canvas)
+        canvas_window = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",
+                    lambda e: canvas.itemconfigure(canvas_window, width=e.width))
+        # 鼠标滚轮仅在左面板内滚动（避免误滚动右面板）
+        def _on_wheel(e):
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_wheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        # ===== 系统快捷工具 =====
+        sec1 = ttk.LabelFrame(inner, text="  🖥  系统快捷工具  ", padding=8,
                                style="Card.TLabelframe")
         sec1.pack(fill="x", pady=(0, 8))
         intro1 = tk.Label(sec1, text="以下按钮直接调用 Windows 自带工具：",
@@ -2357,8 +2368,8 @@ class CleanerApp:
             self._make_icon_button(grid1, kind, text, cmd).grid(
                 row=r, column=c, padx=3, pady=3, sticky="ew")
 
-        # 优化与卸载面板
-        sec2 = ttk.LabelFrame(parent, text="  🧩  优化与卸载面板  ", padding=8,
+        # ===== 优化与卸载面板 =====
+        sec2 = ttk.LabelFrame(inner, text="  🧩  优化与卸载面板  ", padding=8,
                                style="Card.TLabelframe")
         sec2.pack(fill="x", pady=(0, 8))
         grid2 = ttk.Frame(sec2)
@@ -2376,15 +2387,15 @@ class CleanerApp:
             self._make_icon_button(grid2, kind, text, cmd).grid(
                 row=r, column=c, padx=3, pady=3, sticky="ew")
 
-        # 一键优化（需管理员）
-        sec3 = ttk.LabelFrame(parent,
+        # ===== 一键优化（需管理员） =====
+        sec3 = ttk.LabelFrame(inner,
                                text="  ⚡  一键优化（需管理员，执行前会二次确认）  ",
                                padding=8, style="Card.TLabelframe")
         sec3.pack(fill="x", pady=(0, 4))
         warning = tk.Label(sec3,
                            text="⚠ 高危操作：非管理员将被 UAC 提权，每项执行前二次确认，全部可逆。",
                            bg=self.COLOR_CARD, fg=self.COLOR_DANGER,
-                           font=("Microsoft YaHei UI", 8.5))
+                           font=("Microsoft YaHei UI", 8.5), wraplength=520)
         warning.pack(anchor="w", pady=(0, 6))
         grid3 = ttk.Frame(sec3)
         grid3.pack(fill="x")
