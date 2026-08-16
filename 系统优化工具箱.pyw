@@ -1671,6 +1671,39 @@ OPTDUCK_OPTS = [
 # ----------------------------------------------------------------------------
 # 3. GUI
 # ----------------------------------------------------------------------------
+
+# ---- 主题调色板：浅色 / 深色（v4.0 主题系统）----
+THEME_LIGHT = {
+    "name": "浅色",
+    "bg": "#f5f7fb", "card": "#ffffff", "border": "#e3e8f1",
+    "text": "#1f2937", "text2": "#64748b",
+    "accent": "#2563eb", "accent_h": "#1d4ed8", "accent_p": "#1e40af",
+    "accent2": "#0f766e", "warn": "#d97706", "danger": "#dc2626", "danger_h": "#b91c1c",
+    "header": "#f1f5f9", "header_fg": "#475569",
+    "btn_active": "#eef2fb", "btn_pressed": "#e0e7f5",
+    "log_bg": "#0f172a", "log_fg": "#e2e8f0", "log_border": "#1e293b",
+    "tree_checked": "#dcfce7", "tree_checked_fg": "#14532d",
+    "tree_sel": "#dbeafe", "tree_sel_fg": "#1e3a8a",
+    "card_sub": "#e2e8f0", "gauge_track": "#e5eaf3",
+    "opt_fg": "#7c2d12", "opt_bg": "#fff7ed", "opt_border": "#fed7aa", "opt_active": "#ffedd5",
+}
+
+THEME_DARK = {
+    "name": "深色",
+    "bg": "#0b1220", "card": "#151e2e", "border": "#2b3a52",
+    "text": "#e2e8f0", "text2": "#8fa3bf",
+    "accent": "#3b82f6", "accent_h": "#2563eb", "accent_p": "#1d4ed8",
+    "accent2": "#14b8a6", "warn": "#f59e0b", "danger": "#ef4444", "danger_h": "#dc2626",
+    "header": "#1b2942", "header_fg": "#a8b8d0",
+    "btn_active": "#243349", "btn_pressed": "#2b3d57",
+    "log_bg": "#070d18", "log_fg": "#cbd5e1", "log_border": "#2b3a52",
+    "tree_checked": "#123524", "tree_checked_fg": "#86efac",
+    "tree_sel": "#1e3a8a", "tree_sel_fg": "#dbeafe",
+    "card_sub": "#cbd5e1", "gauge_track": "#2b3a52",
+    "opt_fg": "#fbbf24", "opt_bg": "#2b2410", "opt_border": "#5b4a16", "opt_active": "#3a2f14",
+}
+
+
 class CleanerApp:
     def __init__(self, root):
         self.root = root
@@ -1684,27 +1717,39 @@ class CleanerApp:
         self.item_size = {}
         self.item_count = {}
         self.cleaning = False
+        self._scanning = False
 
-        # 统一的现代风格调色板：浅蓝灰底 + 白卡片 + 文字深灰 + 强调色
+        # ---- v4.0 状态：主题 / 健康分 / 监控 / 智能清理 ----
+        self.theme_name = "light"
+        self.T = THEME_LIGHT
+        self.health_score = 0
+        self.health_level = "未评估"
+        self._gauge_cur = 0
+        self._last_clean_bonus = 0
+        self._auto_clean_pending = False
+        self._mon_after = None
+        self._mon_samples = []
+        self._logo_ref = None
+
         self._setup_styles()
-
         self._build_ui()
         self._refresh_admin_badge()
+        self._update_status_bar()
 
-    # ---- 统一 Style：浅蓝灰底 + 卡片化 + 强调色按钮 ----
+    # ---- 统一 Style：从当前主题调色板读取（v4.0 支持浅/深色切换）----
     def _setup_styles(self):
         from tkinter import font as tkfont
-        # 全局配色
-        COLOR_BG       = "#f5f7fb"   # 整窗底色（浅蓝灰，模仿移动 App 浅背景）
-        COLOR_CARD     = "#ffffff"   # 卡片白
-        COLOR_BORDER   = "#e3e8f1"   # 卡片浅边框
-        COLOR_TEXT     = "#1f2937"   # 主文字深灰
-        COLOR_TEXT2    = "#64748b"   # 次级文字
-        COLOR_ACCENT   = "#2563eb"   # 主色蓝（操作类按钮）
-        COLOR_ACCENT2  = "#0f766e"   # 副色青绿（统计/勾选）
-        COLOR_WARN     = "#d97706"   # 警示橙（一键优化）
-        COLOR_DANGER   = "#dc2626"   # 危险红（清理）
-        COLOR_HEADER   = "#f1f5f9"   # 表头底
+        T = self.T
+        COLOR_BG       = T["bg"]          # 整窗底色
+        COLOR_CARD     = T["card"]        # 卡片底
+        COLOR_BORDER   = T["border"]      # 卡片边框
+        COLOR_TEXT     = T["text"]        # 主文字
+        COLOR_TEXT2    = T["text2"]       # 次级文字
+        COLOR_ACCENT   = T["accent"]      # 主色（操作按钮）
+        COLOR_ACCENT2  = T["accent2"]     # 副色（统计/勾选）
+        COLOR_WARN     = T["warn"]        # 警示橙
+        COLOR_DANGER   = T["danger"]      # 危险红
+        COLOR_HEADER   = T["header"]      # 表头底
 
         self.root.configure(bg=COLOR_BG)
         # Windows 下若 DPI 缩放过，把默认字体也调一下，避免按钮文字偏小
@@ -1741,8 +1786,8 @@ class CleanerApp:
                      bordercolor=COLOR_BORDER,
                      lightcolor=COLOR_CARD, darkcolor=COLOR_BORDER)
         ts.map("TButton",
-               background=[("active", "#eef2fb"), ("pressed", "#e0e7f5"), ("disabled", "#f1f5f9")],
-               foreground=[("disabled", "#94a3b8")])
+               background=[("active", T["btn_active"]), ("pressed", T["btn_pressed"]), ("disabled", COLOR_HEADER)],
+               foreground=[("disabled", T["text2"])])
 
         # 强调蓝色按钮（扫描 / 统计 / 管理员）
         ts.configure("Primary.TButton",
@@ -1753,10 +1798,10 @@ class CleanerApp:
                      bordercolor=COLOR_ACCENT,
                      lightcolor=COLOR_ACCENT, darkcolor=COLOR_ACCENT)
         ts.map("Primary.TButton",
-               background=[("active", "#1d4ed8"), ("pressed", "#1e40af"), ("disabled", "#93c5fd")],
+               background=[("active", T["accent_h"]), ("pressed", T["accent_p"]), ("disabled", "#93c5fd")],
                foreground=[("disabled", "#f1f5f9")])
 
-        # 强调绿色（开始清理）
+        # 危险红（开始清理）
         ts.configure("Action.TButton",
                      font=("Microsoft YaHei UI", 9, "bold"),
                      padding=(14, 7),
@@ -1765,19 +1810,31 @@ class CleanerApp:
                      bordercolor=COLOR_DANGER,
                      lightcolor=COLOR_DANGER, darkcolor=COLOR_DANGER)
         ts.map("Action.TButton",
-               background=[("active", "#b91c1c"), ("pressed", "#991b1b"), ("disabled", "#fca5a5")],
+               background=[("active", T["danger_h"]), ("pressed", "#991b1b"), ("disabled", "#fca5a5")],
+               foreground=[("disabled", "#f1f5f9")])
+
+        # 智能一键（紫罗兰）
+        ts.configure("Smart.TButton",
+                     font=("Microsoft YaHei UI", 9, "bold"),
+                     padding=(14, 7),
+                     foreground="#ffffff",
+                     background="#6366f1",
+                     bordercolor="#6366f1",
+                     lightcolor="#6366f1", darkcolor="#6366f1")
+        ts.map("Smart.TButton",
+               background=[("active", "#4f46e5"), ("pressed", "#4338ca"), ("disabled", "#a5b4fc")],
                foreground=[("disabled", "#f1f5f9")])
 
         # 一键优化橙色（高密度按钮）
         ts.configure("Opt.TButton",
                      font=("Microsoft YaHei UI", 9),
                      padding=(10, 5),
-                     foreground="#7c2d12",
-                     background="#fff7ed",
-                     bordercolor="#fed7aa",
-                     lightcolor="#fff7ed", darkcolor="#fed7aa")
+                     foreground=T["opt_fg"],
+                     background=T["opt_bg"],
+                     bordercolor=T["opt_border"],
+                     lightcolor=T["opt_bg"], darkcolor=T["opt_border"])
         ts.map("Opt.TButton",
-               background=[("active", "#ffedd5"), ("pressed", "#fed7aa")],
+               background=[("active", T["opt_active"]), ("pressed", T["opt_border"])],
                foreground=[("active", COLOR_WARN)])
 
         # 顶栏标签
@@ -1802,13 +1859,13 @@ class CleanerApp:
         ts.configure("Cleanup.Treeview.Heading",
                      font=("Microsoft YaHei UI", 9, "bold"),
                      background=COLOR_HEADER,
-                     foreground="#475569",
+                     foreground=T["header_fg"],
                      bordercolor=COLOR_BORDER,
                      lightcolor=COLOR_HEADER, darkcolor=COLOR_HEADER,
                      padding=(8, 6))
         ts.map("Cleanup.Treeview",
-               background=[("selected", "#dbeafe")],
-               foreground=[("selected", "#1e3a8a")])
+               background=[("selected", T["tree_sel"])],
+               foreground=[("selected", T["tree_sel_fg"])])
 
         # 颜色常量挂到 self 上，方便日志框/_build_ui 其它处复用
         self.COLOR_BG = COLOR_BG
@@ -1820,6 +1877,377 @@ class CleanerApp:
         self.COLOR_ACCENT2 = COLOR_ACCENT2
         self.COLOR_WARN = COLOR_WARN
         self.COLOR_DANGER = COLOR_DANGER
+
+    # ================= v4.0 智能版：主题切换 =================
+    def _apply_theme(self):
+        """浅色/深色主题一键切换：整窗重建（保留扫描结果与健康分）。"""
+        self.theme_name = "dark" if self.theme_name == "light" else "light"
+        self.T = THEME_DARK if self.theme_name == "dark" else THEME_LIGHT
+        try:
+            if self._mon_after:
+                self.root.after_cancel(self._mon_after)
+                self._mon_after = None
+        except Exception:
+            pass
+        for w in self.root.winfo_children():
+            w.destroy()
+        self._setup_styles()
+        self._build_ui()
+        self._refresh_admin_badge()
+        self._update_stat()
+        if self.health_score:
+            self._update_health(animate=False)
+        self._update_status_bar()
+        self._log(f"已切换至「{self.T['name']}」主题", "ok")
+
+    # ================= v4.0 智能版：左栏组合（健康分 + 卡片 + 监控） =================
+    def _build_left_column(self, parent):
+        self._build_health_widget(parent)
+        self._build_tool_cards(parent)
+        self._build_monitor_widget(parent)
+
+    # ---- 健康分仪表盘（Canvas 圆环 + 动效）----
+    def _build_health_widget(self, parent):
+        box = tk.Frame(parent, bg=self.COLOR_CARD,
+                       highlightthickness=1, highlightbackground=self.COLOR_BORDER, bd=0)
+        box.pack(fill="x", padx=6, pady=(6, 6))
+        inner = tk.Frame(box, bg=self.COLOR_CARD)
+        inner.pack(fill="x", padx=10, pady=8)
+        self.health_cv = tk.Canvas(inner, width=78, height=78, bg=self.COLOR_CARD,
+                                   highlightthickness=0, bd=0)
+        self.health_cv.pack(side="left")
+        info = tk.Frame(inner, bg=self.COLOR_CARD)
+        info.pack(side="left", padx=(12, 0), fill="both", expand=True)
+        self.health_val = tk.Label(info, text="健康分 --", font=("Microsoft YaHei UI", 15, "bold"),
+                                   bg=self.COLOR_CARD, fg=self.COLOR_TEXT)
+        self.health_val.pack(anchor="w")
+        self.health_lvl = tk.Label(info, text="扫描后自动评估系统状态", font=("Microsoft YaHei UI", 9),
+                                   bg=self.COLOR_CARD, fg=self.COLOR_TEXT2)
+        self.health_lvl.pack(anchor="w", pady=(3, 0))
+        tk.Label(info, text="垃圾越少 · 健康分越高", font=("Microsoft YaHei UI", 8),
+                 bg=self.COLOR_CARD, fg=self.COLOR_TEXT2).pack(anchor="w", pady=(2, 0))
+        self._gauge_color = "#10b981"
+        self._health_draw(0)
+
+    def _health_draw(self, score):
+        try:
+            cv = self.health_cv
+            cv.delete("all")
+            W = H = 78
+            cx, cy, R = W / 2, H / 2, 29
+            start, span = 135, -270
+            cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start, extent=span,
+                          style="arc", outline=self.T["gauge_track"], width=7)
+            col = getattr(self, "_gauge_color", "#10b981")
+            cv.create_arc(cx - R, cy - R, cx + R, cy + R, start=start,
+                          extent=span * max(0, min(100, score)) / 100.0,
+                          style="arc", outline=col, width=7)
+            cv.create_text(cx, cy - 3, text=str(score), font=("Microsoft YaHei UI", 14, "bold"),
+                           fill=self.COLOR_TEXT)
+            cv.create_text(cx, cy + 15, text="健康分", font=("Microsoft YaHei UI", 8),
+                           fill=self.COLOR_TEXT2)
+        except Exception:
+            pass
+
+    def _animate_gauge(self, target):
+        cur = getattr(self, "_gauge_cur", 0)
+
+        def step(i):
+            self._gauge_cur = cur + (target - cur) * i / 18.0
+            self._health_draw(int(round(self._gauge_cur)))
+            if i < 18:
+                self.root.after(16, step, i + 1)
+
+        self.root.after(10, step, 0)
+
+    def _compute_health(self):
+        junk = sum(self.item_size[i["id"]] for i in CLEAN_ITEMS)
+        gb = junk / (1024.0 ** 3)
+        score = 100.0
+        score -= min(40.0, gb * 4)                                   # 垃圾占用
+        high = sum(1 for i in CLEAN_ITEMS
+                   if i.get("risk") == "高" and self.item_vars[i["id"]].get())
+        score -= min(20.0, high * 3)                                 # 勾选高风险
+        if not is_admin():
+            score -= 8                                               # 权限不足
+        score += self._last_clean_bonus                              # 清理加成
+        return max(20, min(100, int(round(score))))
+
+    def _update_health(self, animate=True):
+        score = self._compute_health()
+        self.health_score = score
+        if score >= 85:
+            lvl, tip, col = "极佳", "系统非常干净", "#10b981"
+        elif score >= 70:
+            lvl, tip, col = "良好", "有少量可清理项", "#0ea5e9"
+        elif score >= 50:
+            lvl, tip, col = "一般", "建议尽快清理", "#f59e0b"
+        else:
+            lvl, tip, col = "待优化", "垃圾占用较多", "#ef4444"
+        self.health_level = lvl
+        self._gauge_color = col
+        try:
+            self.health_val.configure(text=f"健康分 {score}", fg=col)
+            self.health_lvl.configure(text=f"{lvl} · {tip}")
+            if animate:
+                self._animate_gauge(score)
+            else:
+                self._gauge_cur = score
+                self._health_draw(score)
+        except Exception:
+            pass
+        self._update_status_bar()
+
+    # ================= v4.0 智能版：实时资源监控 =================
+    def _build_monitor_widget(self, parent):
+        try:
+            if self._mon_after:
+                self.root.after_cancel(self._mon_after)
+                self._mon_after = None
+        except Exception:
+            pass
+        box = tk.Frame(parent, bg=self.COLOR_CARD,
+                       highlightthickness=1, highlightbackground=self.COLOR_BORDER, bd=0)
+        box.pack(fill="x", padx=6, pady=(0, 6))
+        row = tk.Frame(box, bg=self.COLOR_CARD)
+        row.pack(fill="x", padx=10, pady=(6, 0))
+        self.mon_cpu_var = tk.StringVar(value="CPU --%")
+        self.mon_ram_var = tk.StringVar(value="RAM --%")
+        tk.Label(row, textvariable=self.mon_cpu_var, bg=self.COLOR_CARD, fg=self.COLOR_TEXT,
+                 font=("Microsoft YaHei UI", 9, "bold")).pack(side="left")
+        tk.Label(row, textvariable=self.mon_ram_var, bg=self.COLOR_CARD, fg=self.COLOR_ACCENT2,
+                 font=("Microsoft YaHei UI", 9, "bold")).pack(side="left", padx=(14, 0))
+        tk.Label(row, text="实时监控", bg=self.COLOR_CARD, fg=self.COLOR_TEXT2,
+                 font=("Microsoft YaHei UI", 8)).pack(side="right")
+        self.mon_cv = tk.Canvas(box, height=36, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
+        self.mon_cv.pack(fill="x", padx=6, pady=(2, 5))
+        self._mon_tick()
+
+    def _mon_tick(self):
+        try:
+            cpu = _cpu_percent()
+            ram = _ram_percent()
+        except Exception:
+            cpu, ram = 0.0, 0.0
+        self._mon_samples.append((cpu, ram))
+        if len(self._mon_samples) > 40:
+            self._mon_samples.pop(0)
+        try:
+            self.mon_cpu_var.set(f"CPU {cpu:.0f}%")
+            self.mon_ram_var.set(f"RAM {ram:.0f}%")
+            self._mon_draw()
+        except Exception:
+            pass
+        try:
+            self._mon_after = self.root.after(2000, self._mon_tick)
+        except Exception:
+            self._mon_after = None
+
+    def _mon_draw(self):
+        try:
+            cv = self.mon_cv
+            w = cv.winfo_width()
+            if w <= 1:
+                w = 220
+            h = 36
+            cv.delete("all")
+            n = len(self._mon_samples)
+            if n < 2:
+                return
+            for idx, color in ((0, self.COLOR_ACCENT), (1, self.COLOR_ACCENT2)):
+                pts = []
+                for i, (cpu, ram) in enumerate(self._mon_samples):
+                    x = 2 + i * (w - 6) / (n - 1)
+                    v = cpu if idx == 0 else ram
+                    y = h - 4 - min(100.0, max(0.0, v)) / 100.0 * (h - 10)
+                    pts += [x, y]
+                cv.create_line(pts, fill=color, width=2, smooth=True)
+        except Exception:
+            pass
+
+    # ================= v4.0 智能版：状态栏 =================
+    def _build_status_bar(self):
+        bar = tk.Frame(self.root, bg=self.COLOR_BG)
+        bar.pack(fill="x", padx=14, pady=(2, 8))
+        self.status_lbl = tk.Label(bar, text="就绪", font=("Microsoft YaHei UI", 9),
+                                   bg=self.COLOR_BG, fg=self.COLOR_TEXT2)
+        self.status_lbl.pack(side="left")
+        self.status_lbl2 = tk.Label(bar, text="v4.0 智能版", font=("Microsoft YaHei UI", 9, "bold"),
+                                    bg=self.COLOR_BG, fg=self.COLOR_ACCENT)
+        self.status_lbl2.pack(side="right")
+
+    def _update_status_bar(self):
+        try:
+            sessions = self._load_stats()
+            total_mb = sum(s.get("freed_mb", 0) for s in sessions)
+            perm = "管理员" if is_admin() else "普通权限"
+            self.status_lbl.configure(
+                text=f"健康分 {self.health_score}（{self.health_level}） ｜ "
+                     f"累计释放 {human_size(int(total_mb * 1048576))} ｜ "
+                     f"清理 {len(sessions)} 次 ｜ 权限：{perm}")
+        except Exception:
+            pass
+
+    # ================= v4.0 智能版：战报 / 成就 / 数据 =================
+    def _data_dir(self, name):
+        base = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) \
+            else os.path.dirname(os.path.abspath(__file__))
+        d = os.path.join(base, name)
+        try:
+            os.makedirs(d, exist_ok=True)
+        except Exception:
+            pass
+        return d
+
+    def _load_stats(self):
+        try:
+            import json
+            p = os.path.join(self._data_dir("stats"), "history.json")
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data.get("sessions", [])
+        except Exception:
+            pass
+        return []
+
+    def _record_clean(self, freed, removed):
+        try:
+            import datetime
+            import json
+            sessions = self._load_stats()
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            sessions.append({"ts": now, "freed_mb": round(freed / 1048576.0, 2), "items": removed})
+            if len(sessions) > 200:
+                sessions = sessions[-200:]
+            p = os.path.join(self._data_dir("stats"), "history.json")
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"sessions": sessions}, f, ensure_ascii=False, indent=1)
+            for icon, name, desc in self._check_achievements(sessions):
+                self._log(f"{icon} 解锁成就「{name}」：{desc}", "ok")
+                self._toast(f"{icon} 解锁成就「{name}」！", bg="#7c3aed")
+        except Exception:
+            pass
+
+    @staticmethod
+    def _check_achievements(sessions):
+        total_mb = sum(s.get("freed_mb", 0) for s in sessions)
+        days = len({s.get("ts", "")[:10] for s in sessions})
+        rules = [
+            ("🎯", "首战告捷", "完成第一次清理", len(sessions) >= 1),
+            ("🔁", "渐入佳境", "累计清理 3 次", len(sessions) >= 3),
+            ("🏅", "清理大师", "累计清理 10 次", len(sessions) >= 10),
+            ("📦", "空间解放者", "累计释放 2 GB", total_mb >= 2048),
+            ("🚀", "超级清理员", "累计释放 10 GB", total_mb >= 10240),
+            ("💥", "单次暴击", "单次释放超 1 GB", any(s.get("freed_mb", 0) >= 1024 for s in sessions)),
+            ("⏰", "早起鸟儿", "8 点前完成清理", any(int(s.get("ts", "12:00")[11:13]) < 8 for s in sessions)),
+            ("💪", "勤勉之星", "累计清理 2 天", days >= 2),
+        ]
+        return [(i, n, d) for (i, n, d, ok) in rules if ok]
+
+    def _toast(self, msg, bg="#0f766e", fg="#ffffff"):
+        """右下角轻提示：2.6 秒后自动消失。"""
+        try:
+            t = tk.Toplevel(self.root)
+            t.overrideredirect(True)
+            t.attributes("-topmost", True)
+            tk.Label(t, text=msg, bg=bg, fg=fg, font=("Microsoft YaHei UI", 10, "bold"),
+                     padx=18, pady=10).pack()
+            t.update_idletasks()
+            x = self.root.winfo_rootx() + self.root.winfo_width() - t.winfo_width() - 24
+            y = self.root.winfo_rooty() + self.root.winfo_height() - t.winfo_height() - 64
+            t.geometry(f"+{x}+{y}")
+            t.after(2600, t.destroy)
+        except Exception:
+            pass
+
+    def open_stats(self):
+        """战报窗口：统计卡 + 成就徽章 + 近 10 次清理柱状图。"""
+        sessions = self._load_stats()
+        total_mb = sum(s.get("freed_mb", 0) for s in sessions)
+        best = max((s.get("freed_mb", 0) for s in sessions), default=0)
+        win = tk.Toplevel(self.root)
+        self._add_title_bar(win, "我的战报", "🏆", (0x7c, 0x3a, 0xed))
+        win.title("我的战报")
+        win.geometry("660x580")
+        win.transient(self.root)
+        try:
+            win.iconbitmap(self._icon_path)
+        except Exception:
+            pass
+        body = ttk.Frame(win, padding=12)
+        body.pack(fill="both", expand=True)
+
+        def stat_card(parent, icon, label, value):
+            c = ttk.LabelFrame(parent, text="", padding=8, style="Card.TLabelframe")
+            c.pack(side="left", expand=True, fill="x", padx=4)
+            ttk.Label(c, text=icon, font=("Segoe UI Emoji", 18)).pack(anchor="w")
+            ttk.Label(c, text=label, font=("Microsoft YaHei UI", 8),
+                      foreground=self.COLOR_TEXT2).pack(anchor="w")
+            ttk.Label(c, text=value, font=("Microsoft YaHei UI", 13, "bold"),
+                      foreground=self.COLOR_ACCENT).pack(anchor="w")
+            return c
+
+        row0 = ttk.Frame(body)
+        row0.pack(fill="x")
+        stat_card(row0, "📦", "累计释放", human_size(int(total_mb * 1048576)))
+        stat_card(row0, "🔁", "清理次数", f"{len(sessions)} 次")
+        stat_card(row0, "💥", "最佳单次", human_size(int(best * 1048576)))
+
+        ttk.Label(body, text="🏅 成就徽章", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(12, 4))
+        unlocked = {n for _, n, _ in self._check_achievements(sessions)}
+        all_achs = [
+            ("🎯", "首战告捷", "完成第一次清理"), ("🔁", "渐入佳境", "累计清理 3 次"),
+            ("🏅", "清理大师", "累计清理 10 次"), ("📦", "空间解放者", "累计释放 2 GB"),
+            ("🚀", "超级清理员", "累计释放 10 GB"), ("💥", "单次暴击", "单次释放超 1 GB"),
+            ("⏰", "早起鸟儿", "8 点前完成清理"), ("💪", "勤勉之星", "累计清理 2 天"),
+        ]
+        ach = ttk.Frame(body)
+        ach.pack(fill="x")
+        for i in range(0, len(all_achs), 2):
+            row = ttk.Frame(ach)
+            row.pack(fill="x", pady=2)
+            for icon, name, desc in all_achs[i:i + 2]:
+                on = name in unlocked
+                c = ttk.Frame(row, style="Card.TFrame")
+                c.pack(side="left", expand=True, fill="x", padx=4)
+                ttk.Label(c, text=f"{icon} {name}", font=("Microsoft YaHei UI", 10, "bold"),
+                          foreground=self.COLOR_ACCENT2 if on else "#94a3b8").pack(anchor="w")
+                ttk.Label(c, text=desc, font=("Microsoft YaHei UI", 8),
+                          foreground=self.COLOR_TEXT2 if on else "#94a3b8").pack(anchor="w")
+
+        ttk.Label(body, text="📊 近 10 次清理", font=("Microsoft YaHei UI", 11, "bold")).pack(anchor="w", pady=(12, 4))
+        cv = tk.Canvas(body, height=120, width=620, bg=self.COLOR_CARD, highlightthickness=0, bd=0)
+        cv.pack(fill="x")
+        recent = sessions[-10:]
+        if recent:
+            mx = max(max(s.get("freed_mb", 0) for s in recent), 1)
+            n = len(recent)
+            bw, gap = 38, 14
+            x0 = (620 - n * (bw + gap)) // 2
+            for i, s in enumerate(recent):
+                h = max(4, 96 * s.get("freed_mb", 0) / mx)
+                x = x0 + i * (bw + gap)
+                y = 108 - h
+                cv.create_rectangle(x, y, x + bw, 108, fill="#6366f1", outline="")
+                cv.create_text(x + bw / 2, y - 8,
+                               text=f"{s.get('freed_mb', 0) / 1024:.1f}G" if s.get("freed_mb", 0) >= 1024
+                               else f"{s.get('freed_mb', 0):.0f}M",
+                               font=("Microsoft YaHei UI", 8), fill=self.COLOR_TEXT2)
+        else:
+            cv.create_text(310, 60, text="还没有清理记录，去清理一次吧 🧹", fill=self.COLOR_TEXT2)
+
+    # ================= v4.0 智能版：智能一键 =================
+    def _smart_clean(self):
+        """只勾选低/中风险项 → 自动扫描 → 自动清理 → 自动记录战报。"""
+        if self.cleaning or self._scanning:
+            return
+        for item in CLEAN_ITEMS:
+            self.item_vars[item["id"]].set(item["risk"] != "高")
+            self._redraw_check(item["id"])
+        self._auto_clean_pending = True
+        self._log("✨ 智能一键：仅清理低/中风险缓存，全程自动，安全可靠", "head")
+        self._scan()
 
     # ===== 圆角彩色卡片组件（PIL 生成圆角渐变背景 + Canvas 叠文字）=====
     def _card_bg_image(self, w, h, cfrom, cto, radius=14):
@@ -1854,7 +2282,7 @@ class CleanerApp:
         等比例缩放（基准 REF_W=200，最小尺寸有下限保可读）。窗口拉宽/拉窄时卡片自动重绘。"""
         h = 90
         REF_W = 200                                       # 基准卡片宽度
-        cv = tk.Canvas(parent, bd=0, highlightthickness=0, bg=self.COLOR_BG, height=h)
+        cv = tk.Canvas(parent, bd=0, highlightthickness=0, bg=self.COLOR_CARD, height=h)
         cv._last_key = None
         cv._bg_item = None
         cv._img = None
@@ -1937,6 +2365,7 @@ class CleanerApp:
             ("🌐", "外部工具", "Win10 优化 / 360", (0x25, 0x63, 0xeb), (0x38, 0xbd, 0xf8), self.open_external_tools),
             ("🖥", "系统工具", "控制面板等 9 项", (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools),
             ("📄", "导出报告", "导出扫描结果", (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report),
+            ("🏆", "我的战报", "统计成就 · 历史图表", (0x7c, 0x3a, 0xed), (0xc0, 0x26, 0xd3), self.open_stats),
         ]
         # 流式布局（全部 1 列等宽，避免 columnspan 引起的 Canvas 虚拟宽度不触发 Configure 陷阱）
         COLS = 2
@@ -1979,15 +2408,12 @@ class CleanerApp:
 
     # ---- UI 构建 ----
     def _build_ui(self):
-        # 顶部：左侧 logo 圆角色块 + 标题/副标题（贴近参考图"全部工具"标题区）
+        # 顶部：左侧 logo 圆角色块 + 标题/副标题
         top = tk.Frame(self.root, bg=self.COLOR_BG)
         top.pack(fill="x", padx=14, pady=(10, 4))
 
-        # 左侧 logo：用 Canvas 画一个圆角色块，里面放 emoji，模仿参考图图标
-        from PIL import ImageTk  # 复用已有依赖
-        # 不依赖 PIL，用纯 tk 文本画一个圆角色块
         try:
-            from PIL import Image, ImageDraw, ImageFont
+            from PIL import Image, ImageDraw, ImageTk
             _logo_img = Image.new("RGBA", (44, 44), (37, 99, 235, 255))  # 主色蓝
             _d = ImageDraw.Draw(_logo_img)
             _d.ellipse((0, 0, 44, 44), fill=(37, 99, 235, 255))
@@ -2010,13 +2436,19 @@ class CleanerApp:
         tk.Label(title_box, text="系统优化工具箱",
                  font=("Microsoft YaHei UI", 16, "bold"),
                  bg=self.COLOR_BG, fg=self.COLOR_TEXT).pack(anchor="w")
-        tk.Label(title_box, text="一个轻巧、专注的 Windows 维护套件 · v3.0 美化版",
+        tk.Label(title_box, text="轻巧专注的 Windows 维护套件 · v4.0 智能版（健康分 / 战报 / 深色主题）",
                  font=("Microsoft YaHei UI", 9),
                  bg=self.COLOR_BG, fg=self.COLOR_TEXT2).pack(anchor="w")
 
-        # 右侧：管理员徽章 + 版本信息
+        # 右侧：主题切换按钮 + 管理员徽章
         right = tk.Frame(top, bg=self.COLOR_BG)
         right.pack(side="right")
+        self.theme_btn = tk.Label(right, text="🌙 深色", font=("Microsoft YaHei UI", 9, "bold"),
+                                  bg=self.COLOR_CARD, fg=self.COLOR_TEXT, padx=10, pady=3,
+                                  cursor="hand2", highlightthickness=1,
+                                  highlightbackground=self.COLOR_BORDER)
+        self.theme_btn.pack(side="right", anchor="e", padx=(8, 0))
+        self.theme_btn.bind("<Button-1>", lambda e: self._apply_theme())
         self.admin_badge = tk.Label(right, text="  ",
                                     font=("Microsoft YaHei UI", 9, "bold"),
                                     bg=self.COLOR_ACCENT2, fg="#ffffff",
@@ -2027,7 +2459,7 @@ class CleanerApp:
         tk.Frame(self.root, bg=self.COLOR_BORDER, height=1).pack(fill="x", padx=14, pady=(2, 6))
 
         # ---- 主体：左右分栏 ----
-        # 左栏（固定宽）= 圆角彩色工具卡片网格（紧凑 2 列）
+        # 左栏（固定宽）= 健康分仪表 + 圆角彩色工具卡片网格 + 实时资源监控
         # 右栏（弹性）  = 可清理项目面板（弹性高度）+ 运行日志（固定高度）
         main = ttk.Frame(self.root, padding=(10, 0, 10, 6))
         main.pack(fill="both", expand=True)
@@ -2035,18 +2467,21 @@ class CleanerApp:
         main.columnconfigure(1, weight=1)
         main.rowconfigure(0, weight=1)
 
-        # 左：工具卡片网格
+        # 左：健康分 + 工具卡片 + 监控
         left = ttk.Frame(main, style="Card.TFrame")
         left.grid(row=0, column=0, sticky="nsew", padx=(4, 8))
-        self._build_tool_cards(left)
+        self._build_left_column(left)
 
         # 右：清理项目 + 日志（垂直分栏）
-        right = ttk.Frame(main)
-        right.grid(row=0, column=1, sticky="nsew")
-        right.rowconfigure(0, weight=1)   # 清理项目：弹性高度
-        right.rowconfigure(1, weight=0)   # 日志：自然高度
-        self._build_cleanup_panel(right)
-        self._build_log_into(right)
+        right_p = ttk.Frame(main)
+        right_p.grid(row=0, column=1, sticky="nsew")
+        right_p.rowconfigure(0, weight=1)   # 清理项目：弹性高度
+        right_p.rowconfigure(1, weight=0)   # 日志：自然高度
+        self._build_cleanup_panel(right_p)
+        self._build_log_into(right_p)
+
+        # 底部状态栏
+        self._build_status_bar()
 
     # ---- 顶部一行：4 个功能区分组横向并排 ----
     def _build_tools_top_row(self, parent):
@@ -2153,8 +2588,9 @@ class CleanerApp:
         self.tree.configure(yscrollcommand=vsb.set)
         inner.columnconfigure(0, weight=1)
 
-        # 标签：选中行柔和薄荷绿，高危深红；强制未选行也用白底（避免默认主题残留）
-        self.tree.tag_configure("checked", background="#dcfce7", foreground="#14532d")
+        # 标签：选中行柔和薄荷绿，高危深红；强制未选行也用卡片底（避免默认主题残留）
+        self.tree.tag_configure("checked", background=self.T["tree_checked"],
+                                foreground=self.T["tree_checked_fg"])
         self.tree.tag_configure("unchecked", background=self.COLOR_CARD, foreground=self.COLOR_TEXT)
         self.tree.tag_configure("highrisk", foreground=self.COLOR_DANGER)
         for item in CLEAN_ITEMS:
@@ -2169,9 +2605,12 @@ class CleanerApp:
                 tags.append("unchecked")
             if item["risk"] == "高":
                 tags.append("highrisk")
+            _sz = self.item_size.get(item["id"], 0)
+            _cnt = self.item_count.get(item["id"], 0)
+            _size_txt = f"{human_size(_sz)} ({_cnt})" if _sz else "未扫描"
             self.tree.insert(
                 "", "end", iid=item["id"],
-                values=(mark, item["name"], _elide(item["detail"], 28), "未扫描"),
+                values=(mark, item["name"], _elide(item["detail"], 28), _size_txt),
                 tags=tuple(tags)
             )
         self.tree.bind("<Button-1>", self._on_tree_click)
@@ -2194,6 +2633,8 @@ class CleanerApp:
     def _build_action_buttons_into(self, parent):
         inner = ttk.Frame(parent, style="Card.TFrame")
         inner.pack(fill="x", anchor="w")
+        self.btn_smart = ttk.Button(inner, text="✨  智能一键", command=self._smart_clean, style="Smart.TButton")
+        self.btn_smart.pack(side="left", padx=5)
         self.btn_scan = ttk.Button(inner, text="🔍  扫描占用",  command=self._scan,  style="Primary.TButton")
         self.btn_scan.pack(side="left", padx=5)
         self.btn_clean = ttk.Button(inner, text="🚀  开始清理", command=self._ask_clean, style="Action.TButton")
@@ -2219,6 +2660,11 @@ class CleanerApp:
             relief="flat", bd=0, padx=10, pady=6,
         )
         self.log.pack(fill="both", expand=True)
+        # 日志分级着色：ok 绿 / warn 橙 / err 红 / head 蓝
+        self.log.tag_configure("ok", foreground="#34d399")
+        self.log.tag_configure("warn", foreground="#fbbf24")
+        self.log.tag_configure("err", foreground="#f87171")
+        self.log.tag_configure("head", foreground="#93c5fd")
         self.log.configure(state="disabled")
 
     def _open_target(self, target):
@@ -3951,18 +4397,20 @@ class CleanerApp:
                 count += self.item_count[item["id"]]
         self.stat_var.set(f"已选占用：{human_size(total)} ｜ 文件数：{count}")
 
-    def _log(self, msg):
+    def _log(self, msg, level="info"):
         """输出运行日志。线程安全——后台线程调用会通过 after(0) 转发到主线程，
-        避免与 Tk 事件循环争抢 Tcl 解释器锁造成的卡死或崩溃。"""
+        避免与 Tk 事件循环争抢 Tcl 解释器锁造成的卡死或崩溃。
+        level: info / ok / warn / err / head（分级着色）。"""
         try:
             if threading.current_thread() is not threading.main_thread():
-                self.root.after(0, self._log, msg)
+                self.root.after(0, self._log, msg, level)
                 return
         except Exception:
             pass
         try:
+            tag = {"ok": "ok", "warn": "warn", "err": "err", "head": "head"}.get(level, "")
             self.log.configure(state="normal")
-            self.log.insert("end", msg + "\n")
+            self.log.insert("end", msg + "\n", tag or ())
             self.log.see("end")
             self.log.configure(state="disabled")
         except Exception:
@@ -3970,9 +4418,13 @@ class CleanerApp:
 
     # ---- 扫描 ----
     def _scan(self):
+        if self._scanning:
+            return
+        self._scanning = True
+        self._last_clean_bonus = 0
         self.btn_scan.configure(state="disabled")
         drives = "、".join(d + "盘" for d in get_fixed_drives())
-        self._log(f"开始扫描已选项目的占用空间……（已探测固定硬盘：{drives}）")
+        self._log(f"开始扫描已选项目的占用空间……（已探测固定硬盘：{drives}）", "head")
 
         def _scan_update_row(iid, vals):
             # 仅主线程：直接更新 Treeview 行
@@ -3982,8 +4434,16 @@ class CleanerApp:
                 pass
 
         def _scan_done():
+            self._scanning = False
             self._update_stat()
             self.btn_scan.configure(state="normal")
+            self._update_health()
+            if self._auto_clean_pending:
+                self._auto_clean_pending = False
+                self._log("✅ 扫描完成，低/中风险项已自动进入清理……", "ok")
+                self._clean()
+            else:
+                self._log("✅ 扫描完成。可点击「开始清理」或「✨ 智能一键」。", "ok")
 
         def worker():
             for item in CLEAN_ITEMS:
@@ -3993,7 +4453,7 @@ class CleanerApp:
                     sz, cnt = compute_size(item)
                 except Exception as e:
                     sz, cnt = 0, 0
-                    self._log(f"  [跳过] {item['name']} 扫描出错：{e}")
+                    self._log(f"  [跳过] {item['name']} 扫描出错：{e}", "warn")
                 self.item_size[item["id"]] = sz
                 self.item_count[item["id"]] = cnt
                 vals = list(self.tree.item(item["id"], "values"))
@@ -4004,7 +4464,6 @@ class CleanerApp:
                 except Exception:
                     pass
                 self._log(f"  {item['name']}：{human_size(sz)}（{cnt} 个文件）")
-            self._log("扫描完成。请确认无误后点击“开始清理”。")
             try:
                 self.root.after(0, _scan_done)
             except Exception:
@@ -4039,7 +4498,7 @@ class CleanerApp:
         self.cleaning = True
         self.btn_scan.configure(state="disabled")
         self.btn_clean.configure(state="disabled")
-        self._log("====== 开始清理 ======")
+        self._log("====== 开始清理 ======", "head")
 
         def worker():
             total_freed = 0
@@ -4052,12 +4511,12 @@ class CleanerApp:
                     freed, removed = clean_item(item)
                 except Exception as e:
                     freed, removed = 0, 0
-                    self._log(f"  [错误] {item['name']}：{e}")
+                    self._log(f"  [错误] {item['name']}：{e}", "err")
                 total_freed += freed
                 total_removed += removed
                 self._log(f"  ✓ 释放 {human_size(freed)}（{removed} 项）")
-            self._log("====== 清理完成 ======")
-            self._log(f"✅ 共释放：{human_size(total_freed)}，删除 {total_removed} 个文件/目录。")
+            self._log("====== 清理完成 ======", "ok")
+            self._log(f"✅ 共释放：{human_size(total_freed)}，删除 {total_removed} 个文件/目录。", "ok")
             self.root.after(0, lambda: self._finish_clean(total_freed, total_removed))
 
         threading.Thread(target=worker, daemon=True).start()
@@ -4066,6 +4525,11 @@ class CleanerApp:
         self.cleaning = False
         self.btn_scan.configure(state="normal")
         self.btn_clean.configure(state="normal")
+        # v4.0：记录战报 + 健康分加成 + 轻提示
+        self._record_clean(freed, removed)
+        self._last_clean_bonus = min(15, 5 + int(freed / (256 * 1024 * 1024)))
+        self._update_health()
+        self._toast(f"🎉 本次释放 {human_size(freed)}，删除 {removed} 项！")
         messagebox.showinfo("完成", f"清理完成！\n共释放：{human_size(freed)}\n删除：{removed} 个文件/目录")
         self._scan()
 
@@ -4507,6 +4971,65 @@ class CleanerApp:
         ], per_row=2, width=18, style="TButton")
 
 
+# ---- v4.0 实时监控：ctypes 读取 CPU / 内存（零新依赖）----
+_cpu_last = None
+
+
+def _cpu_percent():
+    """基于两次采样差值的 CPU 使用率（Windows GetSystemTimes）。"""
+    global _cpu_last
+    try:
+        import ctypes as _ct
+
+        class FT(_ct.Structure):
+            _fields_ = [("dwLowDateTime", _ct.c_uint32), ("dwHighDateTime", _ct.c_uint32)]
+
+        def _times():
+            i, k, u = FT(), FT(), FT()
+            _ct.windll.kernel32.GetSystemTimes(_ct.byref(i), _ct.byref(k), _ct.byref(u))
+
+            def tot(f):
+                return (f.dwHighDateTime << 32) | f.dwLowDateTime
+
+            return tot(i), tot(k), tot(u)
+
+        cur = _times()
+        if _cpu_last is None:
+            _cpu_last = cur
+            return 0.0
+        i1, k1, u1 = _cpu_last
+        i2, k2, u2 = cur
+        _cpu_last = cur
+        idle, total = i2 - i1, (k2 - k1) + (u2 - u1)
+        if total <= 0:
+            return 0.0
+        return max(0.0, min(100.0, (1 - idle / total) * 100))
+    except Exception:
+        return 0.0
+
+
+def _ram_percent():
+    """内存使用率（GlobalMemoryStatusEx.dwMemoryLoad，0-100）。"""
+    try:
+        import ctypes as _ct
+
+        class MS(_ct.Structure):
+            _fields_ = [
+                ("dwLength", _ct.c_ulong), ("dwMemoryLoad", _ct.c_ulong),
+                ("ullTotalPhys", _ct.c_ulonglong), ("ullAvailPhys", _ct.c_ulonglong),
+                ("ullTotalPageFile", _ct.c_ulonglong), ("ullAvailPageFile", _ct.c_ulonglong),
+                ("ullTotalVirtual", _ct.c_ulonglong), ("ullAvailVirtual", _ct.c_ulonglong),
+                ("ullAvailExtendedVirtual", _ct.c_ulonglong),
+            ]
+
+        m = MS()
+        m.dwLength = _ct.sizeof(MS)
+        _ct.windll.kernel32.GlobalMemoryStatusEx(_ct.byref(m))
+        return float(m.dwMemoryLoad)
+    except Exception:
+        return 0.0
+
+
 def main():
     # 无界面模式：--scan 仅计算并打印占用（用于测试/命令行）
     if "--scan" in sys.argv:
@@ -4531,6 +5054,23 @@ def main():
     try:
         root = tk.Tk()
         app = CleanerApp(root)
+
+        # 启动淡入动效（Windows 支持窗口透明度）
+        try:
+            root.attributes("-alpha", 0.0)
+
+            def _fade(step=0):
+                try:
+                    root.attributes("-alpha", min(1.0, step * 0.1))
+                except Exception:
+                    return
+                if step < 10:
+                    root.after(18, _fade, step + 1)
+
+            _fade()
+        except Exception:
+            pass
+
         # 打开即自动扫描已勾选项目的占用（_scan 内部走后台线程，不卡 UI）
         root.after(500, app._scan)
         root.mainloop()
