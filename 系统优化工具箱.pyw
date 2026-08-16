@@ -2710,12 +2710,125 @@ class CleanerApp:
     def _lighten(c, amt=22):
         return tuple(min(255, v + amt) for v in c)
 
+    @staticmethod
+    def _draw_card_icon(cv, kind, cx, cy, s=26, bg_cut="#ffffff"):
+        """在卡片 Canvas 上画一个固定 s 像素的纯几何白色图标。
+        所有图标在 26×26 包围盒内居中、对齐、永远等大——彻底摆脱 emoji 字体回退问题。"""
+        h = s // 2
+        if kind == "lightning":  # 一键优化
+            pts = [cx + 1, cy - h, cx - h * 0.45, cy + 1, cx - h * 0.1, cy + 1,
+                   cx - h * 0.45, cy + h, cx + h * 0.55, cy - h * 0.15,
+                   cx + h * 0.1, cy - h * 0.15, cx + h * 0.5, cy - h * 0.55]
+            cv.create_polygon(pts, fill="white", outline="")
+        elif kind == "shield":  # 进程拦截
+            cv.create_polygon([cx, cy - h, cx + h, cy - h * 0.6, cx + h * 0.85, cy + h * 0.4,
+                                cx, cy + h, cx - h * 0.85, cy + h * 0.4, cx - h, cy - h * 0.6],
+                              fill="white", outline="")
+        elif kind == "box":  # 系统瘦身（立方体）
+            cv.create_rectangle(cx - h, cy - h * 0.55, cx + h * 0.55, cy + h * 0.85,
+                                outline="white", width=2)
+            cv.create_polygon([cx - h, cy - h * 0.55, cx, cy - h,
+                                cx + h * 0.55, cy - h * 0.55],
+                              outline="white", width=2, fill="")
+            cv.create_polygon([cx + h * 0.55, cy - h * 0.55, cx + h, cy - h,
+                                cx + h, cy + h * 0.85, cx + h * 0.55, cy + h * 0.85],
+                              outline="white", width=2, fill="")
+        elif kind == "broom":  # 深度清理
+            cv.create_polygon([cx - h * 0.3, cy + h * 0.85, cx - h, cy + h,
+                                cx - h * 0.7, cy - h * 0.4, cx, cy - h * 0.6],
+                              fill="white", outline="")
+            for i in range(3):
+                y = cy - h * 0.4 + i * h * 0.22
+                cv.create_line(cx - h * 0.7 + i * h * 0.28, y,
+                               cx - h * 0.35 + i * h * 0.28, y + h * 0.55,
+                               fill="white", width=2)
+        elif kind == "battery":  # 电源方案
+            cv.create_rectangle(cx - h, cy - h * 0.5, cx + h * 0.7, cy + h * 0.5,
+                                outline="white", width=2)
+            cv.create_rectangle(cx + h * 0.7, cy - h * 0.22, cx + h * 1.0, cy + h * 0.22,
+                                fill="white", outline="")
+            cv.create_rectangle(cx - h * 0.7, cy - h * 0.28, cx + h * 0.3, cy + h * 0.28,
+                                fill="white", outline="")
+        elif kind == "gamepad":  # GPU 配置
+            cv.create_polygon([cx - h, cy - h * 0.5, cx - h * 0.7, cy - h * 0.55,
+                                cx + h * 0.7, cy - h * 0.55, cx + h, cy - h * 0.5,
+                                cx + h * 1.1, cy - h * 0.1, cx + h, cy + h * 0.5,
+                                cx - h, cy + h * 0.5, cx - h * 1.1, cy - h * 0.1],
+                              fill="white", outline="")
+            cv.create_oval(cx - h * 0.55, cy - h * 0.15, cx - h * 0.2, cy + h * 0.15,
+                           fill=bg_cut, outline="")
+            cv.create_oval(cx + h * 0.2, cy - h * 0.15, cx + h * 0.55, cy + h * 0.15,
+                           fill=bg_cut, outline="")
+        elif kind == "rocket":  # 启动项
+            cv.create_polygon([cx, cy - h, cx + h * 0.4, cy - h * 0.35,
+                                cx + h * 0.4, cy + h * 0.55, cx - h * 0.4, cy + h * 0.55,
+                                cx - h * 0.4, cy - h * 0.35],
+                              fill="white", outline="")
+            cv.create_polygon([cx - h * 0.4, cy + h * 0.2, cx - h, cy + h * 0.9,
+                                cx - h * 0.4, cy + h * 0.55],
+                              fill="white", outline="")
+            cv.create_polygon([cx + h * 0.4, cy + h * 0.2, cx + h, cy + h * 0.9,
+                                cx + h * 0.4, cy + h * 0.55],
+                              fill="white", outline="")
+            cv.create_polygon([cx - h * 0.25, cy + h * 0.7, cx, cy + h * 1.05,
+                                cx + h * 0.25, cy + h * 0.7],
+                              fill="white", outline="")
+        elif kind == "gear":  # 系统设置
+            import math as _m
+            cv.create_oval(cx - h * 0.7, cy - h * 0.7, cx + h * 0.7, cy + h * 0.7,
+                           fill="white", outline="")
+            for i in range(8):
+                a = i * _m.pi / 4
+                x1 = cx + _m.cos(a) * h * 0.7
+                y1 = cy + _m.sin(a) * h * 0.7
+                x2 = cx + _m.cos(a) * h * 1.05
+                y2 = cy + _m.sin(a) * h * 1.05
+                cv.create_line(x1, y1, x2, y2, fill="white", width=3)
+            cv.create_oval(cx - h * 0.35, cy - h * 0.35, cx + h * 0.35, cy + h * 0.35,
+                           fill=bg_cut, outline="white", width=1)
+        elif kind == "globe":  # 外部工具
+            cv.create_oval(cx - h, cy - h, cx + h, cy + h, outline="white", width=2)
+            cv.create_oval(cx - h * 0.35, cy - h, cx + h * 0.35, cy + h,
+                           outline="white", width=1.5)
+            cv.create_line(cx - h, cy, cx + h, cy, fill="white", width=1.5)
+            cv.create_line(cx, cy - h, cx, cy + h, fill="white", width=1.5)
+        elif kind == "monitor":  # 系统工具
+            cv.create_rectangle(cx - h, cy - h * 0.7, cx + h, cy + h * 0.4,
+                                outline="white", width=2)
+            cv.create_polygon([cx - h * 0.4, cy + h * 0.4, cx - h * 0.3, cy + h * 0.85,
+                                cx + h * 0.3, cy + h * 0.85, cx + h * 0.4, cy + h * 0.4],
+                              fill="white", outline="")
+            cv.create_line(cx - h * 0.65, cy + h * 0.95, cx + h * 0.65, cy + h * 0.95,
+                           fill="white", width=2)
+        elif kind == "document":  # 导出报告
+            cv.create_rectangle(cx - h * 0.65, cy - h, cx + h * 0.7, cy + h,
+                                outline="white", width=2)
+            cv.create_line(cx - h * 0.35, cy - h * 0.5, cx + h * 0.4, cy - h * 0.5,
+                           fill="white", width=2)
+            cv.create_line(cx - h * 0.35, cy, cx + h * 0.4, cy,
+                           fill="white", width=2)
+            cv.create_line(cx - h * 0.35, cy + h * 0.5, cx + h * 0.4, cy + h * 0.5,
+                           fill="white", width=2)
+        elif kind == "trophy":  # 我的战报
+            cv.create_polygon([cx - h * 0.5, cy - h, cx + h * 0.5, cy - h,
+                                cx + h * 0.5, cy + h * 0.1, cx + h * 0.3, cy + h * 0.45,
+                                cx - h * 0.3, cy + h * 0.45, cx - h * 0.5, cy + h * 0.1],
+                              fill="white", outline="")
+            cv.create_oval(cx - h * 0.95, cy - h * 0.75, cx - h * 0.5, cy - h * 0.1,
+                           outline="white", width=2)
+            cv.create_oval(cx + h * 0.5, cy - h * 0.75, cx + h * 0.95, cy - h * 0.1,
+                           outline="white", width=2)
+            cv.create_polygon([cx - h * 0.4, cy + h * 0.45, cx + h * 0.4, cy + h * 0.45,
+                                cx + h * 0.4, cy + h * 0.65, cx - h * 0.4, cy + h * 0.65],
+                              fill="white", outline="")
+            cv.create_rectangle(cx - h * 0.6, cy + h * 0.65, cx + h * 0.6, cy + h * 0.95,
+                                fill="white", outline="")
+
     def _make_tool_card(self, parent, icon, title, subtitle, cfrom, cto, command, wide=False):
-        """创建圆角彩色工具卡片（Canvas 自适应列宽）。
-        所有视觉元素（emoji 字号、标题字号、副标题字号、文字 x/y 位置）按卡片实际宽度 w
-        等比例缩放（基准 REF_W=200，最小尺寸有下限保可读）。窗口拉宽/拉窄时卡片自动重绘。"""
-        h = 90
-        REF_W = 200                                       # 基准卡片宽度
+        """圆角彩色工具卡片（Canvas 自绘图标 · 等大 26×26 · 等高 78px）。
+        图标、字号、位置都按固定像素绘制，**永远等大 + 横平竖直**，避免 emoji 字体回退。"""
+        h = 78
+        REF_W = 200
         cv = tk.Canvas(parent, bd=0, highlightthickness=0, bg=self.COLOR_CARD, height=h)
         cv._last_key = None
         cv._bg_item = None
@@ -2736,29 +2849,27 @@ class CleanerApp:
             img = self._card_bg_image(w, h, cfrom, cto)
             if img is None:
                 cv.configure(bg="#%02x%02x%02x" % cto)
-                return
-            cv._img = img
-            cv._img_hi = self._card_bg_image(w, h, self._lighten(cfrom), self._lighten(cto))
-            bg = cv.create_image(0, 0, image=img, anchor="nw")
-            cv._bg_item = bg
+            else:
+                cv._img = img
+                cv._img_hi = self._card_bg_image(w, h, self._lighten(cfrom), self._lighten(cto))
+                cv._bg_item = cv.create_image(0, 0, image=img, anchor="nw")
 
-            # —— 等比例缩放：所有尺寸基于卡片实际宽度 w ——
-            # 限制 emoji 字号上限 ≤36，避免 Windows 在大字号时回退到
-            # Segoe UI Symbol 单色段字形（导致显示成大轮廓图标、不"横平竖直"）
-            r = w / REF_W                                  # 缩放比
-            emoji_size  = max(18, min(34, int(36 * r)))     # 字号上限 34
-            title_size  = max(9,  int(11 * r))
-            sub_size    = max(7,  int(9  * r))
-            icon_cx     = int(w * 0.16)                    # 图标水平中心
-            text_x      = int(w * 0.30)                    # 文字左对齐起点
-            cv.create_text(icon_cx, h / 2, text=icon,
-                           font=("Segoe UI Emoji", emoji_size), fill="white", anchor="center")
+            # 文字区：标题 12pt 加粗 + 副标题 9pt，右侧固定像素布局
+            r = w / REF_W
+            title_size = max(9, int(11 * r))
+            sub_size   = max(7, int(9  * r))
+            icon_cx    = int(w * 0.15)
+            text_x     = int(w * 0.30)
+            # 固定 26×26 的几何图标（canvas 绘制，bg_cut 用于挖空）
+            self._draw_card_icon(cv, icon, icon_cx, h / 2, s=26,
+                                 bg_cut=self.COLOR_CARD)
             cv.create_text(text_x, h * 0.36, text=title,
-                           font=("Microsoft YaHei UI", title_size, "bold"), fill="white", anchor="w")
+                           font=("Microsoft YaHei UI", title_size, "bold"),
+                           fill="white", anchor="w")
             cv.create_text(text_x, h * 0.68, text=subtitle,
-                           font=("Microsoft YaHei UI", sub_size), fill="#e2e8f0", anchor="w")
+                           font=("Microsoft YaHei UI", sub_size),
+                           fill="#e2e8f0", anchor="w")
 
-            # hover 状态：背景图换成亮色版（只换 background，文字图层不动）
             def on_enter(e):
                 cv.configure(cursor="hand2")
                 if cv._img_hi is not None and cv._bg_item is not None:
@@ -2771,12 +2882,11 @@ class CleanerApp:
 
             cv.bind("<Enter>", on_enter)
             cv.bind("<Leave>", on_leave)
-            cv.tag_bind(bg, "<Enter>", on_enter)
-            cv.tag_bind(bg, "<Leave>", on_leave)
+            if cv._bg_item is not None:
+                cv.tag_bind(cv._bg_item, "<Enter>", on_enter)
+                cv.tag_bind(cv._bg_item, "<Leave>", on_leave)
 
         cv.bind("<Configure>", lambda e: draw())
-        # 关键修复：Canvas 不设 width 时，grid 拉伸的虚拟宽度不触发 <Configure>，
-        # 导致首次 render 永远空白。下一帧主动重绘一次。
         cv.after(20, draw)
         cv.bind("<Button-1>", lambda e: command())
         return cv
@@ -2788,21 +2898,22 @@ class CleanerApp:
         for c in range(2):
             grid.columnconfigure(c, weight=1)
 
-        # (icon, title, subtitle, cfrom, cto, command)
+        # (icon_kind, title, subtitle, cfrom, cto, command)
         # 工具卡 12 张（磁盘地图 / 设置中心改为顶栏快捷入口，避免 3 列下溢出挤掉右栏）
+        # 图标全部用 Canvas 自绘几何图形（_draw_card_icon），永远等大 + 横平竖直
         tools = [
-            ("⚡", "一键优化", "全自动维护", (0x25, 0x63, 0xeb), (0x0e, 0xa5, 0xe9), self.open_optduck),
-            ("🛡", "进程拦截", "广告/挖矿拦截", (0x63, 0x66, 0xf1), (0x8b, 0x5c, 0xf6), self.open_process_block),
-            ("📦", "系统瘦身", "卸载预装", (0x0e, 0xa5, 0xe9), (0x06, 0xb6, 0xd4), self.open_debloat),
-            ("🧹", "深度清理", "注册表/驱动", (0x10, 0xb9, 0x81), (0x14, 0xb8, 0xa6), self.open_deep),
-            ("🔋", "电源方案", "电源切换", (0xf9, 0x73, 0x16), (0xef, 0x44, 0x44), self.open_power),
-            ("🎮", "GPU 配置", "显卡调度", (0xec, 0x48, 0x99), (0xf4, 0x3f, 0x5e), self.open_gpu),
-            ("🚀", "启动项", "开机加速", (0x0d, 0x94, 0x88), (0x0e, 0xa5, 0xe9), self.open_startup),
-            ("⚙", "系统设置", "高级/网络", (0x47, 0x55, 0x69), (0x64, 0x74, 0x8b), self.open_godmode),
-            ("🌐", "外部工具", "Win10/360", (0x25, 0x63, 0xeb), (0x38, 0xbd, 0xf8), self.open_external_tools),
-            ("🖥", "系统工具", "控制面板", (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools),
-            ("📄", "导出报告", "导出结果", (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report),
-            ("🏆", "我的战报", "成就图表", (0x7c, 0x3a, 0xed), (0xc0, 0x26, 0xd3), self.open_stats),
+            ("lightning", "一键优化", "全自动维护",     (0x25, 0x63, 0xeb), (0x0e, 0xa5, 0xe9), self.open_optduck),
+            ("shield",    "进程拦截", "广告/挖矿拦截",   (0x63, 0x66, 0xf1), (0x8b, 0x5c, 0xf6), self.open_process_block),
+            ("box",       "系统瘦身", "卸载预装",         (0x0e, 0xa5, 0xe9), (0x06, 0xb6, 0xd4), self.open_debloat),
+            ("broom",     "深度清理", "注册表/驱动",     (0x10, 0xb9, 0x81), (0x14, 0xb8, 0xa6), self.open_deep),
+            ("battery",   "电源方案", "电源切换",         (0xf9, 0x73, 0x16), (0xef, 0x44, 0x44), self.open_power),
+            ("gamepad",   "GPU 配置", "显卡调度",         (0xec, 0x48, 0x99), (0xf4, 0x3f, 0x5e), self.open_gpu),
+            ("rocket",    "启动项",   "开机加速",         (0x0d, 0x94, 0x88), (0x0e, 0xa5, 0xe9), self.open_startup),
+            ("gear",      "系统设置", "高级/网络",         (0x47, 0x55, 0x69), (0x64, 0x74, 0x8b), self.open_godmode),
+            ("globe",     "外部工具", "Win10/360",        (0x25, 0x63, 0xeb), (0x38, 0xbd, 0xf8), self.open_external_tools),
+            ("monitor",   "系统工具", "控制面板",         (0x4f, 0x46, 0xe5), (0x7c, 0x3a, 0xed), self.open_systools),
+            ("document",  "导出报告", "导出结果",         (0x0d, 0x94, 0x88), (0x10, 0xb9, 0x81), self._export_report),
+            ("trophy",    "我的战报", "成就图表",         (0x7c, 0x3a, 0xed), (0xc0, 0x26, 0xd3), self.open_stats),
         ]
         # 流式布局（3 列等宽，避免 columnspan 引起的 Canvas 虚拟宽度不触发 Configure 陷阱）
         COLS = 3
