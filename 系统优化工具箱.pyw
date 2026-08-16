@@ -2188,21 +2188,21 @@ class CleanerApp:
         # ---- 2. 紧凑状态条（健康分 + 三环 + 摘要 + 快捷操作）----
         self._build_compact_dashboard()
 
-        # ---- 3. 主分割：用 v3 验证过的 grid 布局（不用 PanedWindow）----
+        # ---- 3. 主分割：纯 pack 布局（不用 PanedWindow / 不用 grid+uniform，最朴素）----
         main = ttk.Frame(self.root)
-        main.pack(fill="both", expand=True)
-        main.columnconfigure(0, weight=1, uniform="cols")
-        main.columnconfigure(1, weight=1, uniform="cols")
-        main.rowconfigure(0, weight=1)
+        main.pack(fill="both", expand=True, padx=8, pady=(0, 4))
 
-        # 左 = 工具面板（Canvas + 滚动条，安全）
+        # 左 = 工具面板（固定内容宽度，fill=y）
         left_outer = ttk.Frame(main)
-        left_outer.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=(0, 4))
+        left_outer.pack(side="left", fill="y")
         self._build_tools_panel(left_outer)
 
-        # 右 = 清理 + 日志
+        # 右 = 清理 + 日志（expand 撑满剩余空间）
         right_outer = ttk.Frame(main)
-        right_outer.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=(0, 4))
+        right_outer.pack(side="left", fill="both", expand=True, padx=(6, 0))
+        right_outer.columnconfigure(0, weight=1)   # 水平拉伸
+        right_outer.rowconfigure(0, weight=1)      # 清理面板：弹性高度
+        right_outer.rowconfigure(1, weight=0)      # 日志：自然高度
         self._build_cleanup_panel(right_outer)
         self._build_log_into(right_outer)
 
@@ -2287,20 +2287,21 @@ class CleanerApp:
 
     # ================= v6.0 工具面板（左侧滚动区） =================
     def _make_icon_button(self, parent, kind, text, command):
-        """紧凑型工具按钮：18px Canvas 自绘图标 + 文字，可放入 2 列网格。"""
+        """紧凑型工具按钮：16px Canvas 自绘图标 + 文字，可放入 2 列网格。
+        采用最朴素的 tk.Frame+pack 组合（不用 Canvas 滚动），保证打包后必定可见。"""
         bg = self.COLOR_CARD
         bg_hov = self.T["btn_active"]
         f = tk.Frame(parent, bg=bg, cursor="hand2", highlightthickness=1,
                      highlightbackground=self.COLOR_BORDER)
         f.bind("<Button-1>", lambda e: command())
         inner = tk.Frame(f, bg=bg)
-        inner.pack(padx=10, pady=5, fill="x")
-        cv = tk.Canvas(inner, width=18, height=18, bg=bg, highlightthickness=0, bd=0)
+        inner.pack(padx=8, pady=3, fill="x")
+        cv = tk.Canvas(inner, width=16, height=16, bg=bg, highlightthickness=0, bd=0)
         cv.pack(side="left")
-        self._draw_card_icon(cv, kind, 9, 9, s=14, bg_cut=bg)
+        self._draw_card_icon(cv, kind, 8, 8, s=12, bg_cut=bg)
         lbl = tk.Label(inner, text=text, bg=bg, fg=self.COLOR_TEXT,
-                       font=("Microsoft YaHei UI", 9.5))
-        lbl.pack(side="left", padx=(6, 0))
+                       font=("Microsoft YaHei UI", 9))
+        lbl.pack(side="left", padx=(5, 0))
         lbl.bind("<Button-1>", lambda e: command())
 
         def on_enter(e):
@@ -2321,33 +2322,16 @@ class CleanerApp:
         return f
 
     def _build_tools_panel(self, parent):
-        """左侧工具面板：Canvas + 滚动条 + 28 个 Canvas 自绘图标按钮。
-        28 个按钮（9 系统 + 4 优化 + 15 一键）通过 Canvas 滚动区承载，绝不撑爆左栏。"""
-        canvas = tk.Canvas(parent, bd=0, highlightthickness=0, bg=self.COLOR_BG)
-        scroll = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scroll.set)
-        scroll.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-        inner = ttk.Frame(canvas)
-        canvas_window = canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>",
-                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind("<Configure>",
-                    lambda e: canvas.itemconfigure(canvas_window, width=e.width))
-        # 鼠标滚轮仅在左面板内滚动（避免误滚动右面板）
-        def _on_wheel(e):
-            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_wheel))
-        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
-
+        """左侧工具面板：纯 pack 布局（无 Canvas 滚动），28 个按钮 2 列网格，
+        总高约 600px，默认 820 窗口完全可见——最朴素、最不可能出错的方案。"""
         # ===== 系统快捷工具 =====
-        sec1 = ttk.LabelFrame(inner, text="  🖥  系统快捷工具  ", padding=8,
+        sec1 = ttk.LabelFrame(parent, text="  🖥  系统快捷工具  ", padding=6,
                                style="Card.TLabelframe")
-        sec1.pack(fill="x", pady=(0, 8))
+        sec1.pack(fill="x", pady=(0, 6))
         intro1 = tk.Label(sec1, text="以下按钮直接调用 Windows 自带工具：",
                           bg=self.COLOR_CARD, fg=self.COLOR_TEXT2,
                           font=("Microsoft YaHei UI", 8.5))
-        intro1.pack(anchor="w", pady=(0, 6))
+        intro1.pack(anchor="w", pady=(0, 4))
         grid1 = ttk.Frame(sec1)
         grid1.pack(fill="x")
         for c in range(2):
@@ -2366,12 +2350,12 @@ class CleanerApp:
         for i, (kind, text, cmd) in enumerate(sys_tools):
             r, c = i // 2, i % 2
             self._make_icon_button(grid1, kind, text, cmd).grid(
-                row=r, column=c, padx=3, pady=3, sticky="ew")
+                row=r, column=c, padx=2, pady=2, sticky="ew")
 
         # ===== 优化与卸载面板 =====
-        sec2 = ttk.LabelFrame(inner, text="  🧩  优化与卸载面板  ", padding=8,
+        sec2 = ttk.LabelFrame(parent, text="  🧩  优化与卸载面板  ", padding=6,
                                style="Card.TLabelframe")
-        sec2.pack(fill="x", pady=(0, 8))
+        sec2.pack(fill="x", pady=(0, 6))
         grid2 = ttk.Frame(sec2)
         grid2.pack(fill="x")
         for c in range(2):
@@ -2385,18 +2369,18 @@ class CleanerApp:
         for i, (kind, text, cmd) in enumerate(opt_tools):
             r, c = i // 2, i % 2
             self._make_icon_button(grid2, kind, text, cmd).grid(
-                row=r, column=c, padx=3, pady=3, sticky="ew")
+                row=r, column=c, padx=2, pady=2, sticky="ew")
 
         # ===== 一键优化（需管理员） =====
-        sec3 = ttk.LabelFrame(inner,
+        sec3 = ttk.LabelFrame(parent,
                                text="  ⚡  一键优化（需管理员，执行前会二次确认）  ",
-                               padding=8, style="Card.TLabelframe")
-        sec3.pack(fill="x", pady=(0, 4))
+                               padding=6, style="Card.TLabelframe")
+        sec3.pack(fill="x", pady=(0, 2))
         warning = tk.Label(sec3,
                            text="⚠ 高危操作：非管理员将被 UAC 提权，每项执行前二次确认，全部可逆。",
                            bg=self.COLOR_CARD, fg=self.COLOR_DANGER,
                            font=("Microsoft YaHei UI", 8.5), wraplength=520)
-        warning.pack(anchor="w", pady=(0, 6))
+        warning.pack(anchor="w", pady=(0, 4))
         grid3 = ttk.Frame(sec3)
         grid3.pack(fill="x")
         for c in range(2):
@@ -2421,7 +2405,7 @@ class CleanerApp:
         for i, (kind, text, cmd) in enumerate(one_click):
             r, c = i // 2, i % 2
             self._make_icon_button(grid3, kind, text, cmd).grid(
-                row=r, column=c, padx=3, pady=2, sticky="ew")
+                row=r, column=c, padx=2, pady=2, sticky="ew")
 
     # ================= v6.0 精简健康分大环（44px 给状态条） =================
     def _health_draw(self, score):
